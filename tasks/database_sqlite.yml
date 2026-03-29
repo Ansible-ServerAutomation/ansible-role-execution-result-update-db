@@ -1,104 +1,54 @@
 ---
 # tasks/database_sqlite.yml - SQLite specific tasks
 
-- name: Skip SQLite tasks if no prepared records
-  ansible.builtin.meta: end_host
-  when: _execution_results_prepared | length == 0
-
-- name: Ensure SQLite database directory exists
-  ansible.builtin.file:
-    path: "{{ execution_result_db_sqlite_path | dirname }}"
-    state: directory
-    mode: '0755'
-  delegate_to: localhost
-  run_once: true
-
-- name: Create success_jobs table in SQLite
-  community.general.sqlite3:
-    db: "{{ execution_result_db_sqlite_path }}"
-    query: |
-      CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_success }} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        hostname TEXT,
-        inventory_hostname TEXT,
-        ansible_host TEXT,
-        project TEXT,
-        organization TEXT,
-        job_template TEXT,
-        playbook TEXT,
-        scm_url TEXT,
-        scm_branch TEXT,
-        scm_revision TEXT,
-        execution_environment TEXT,
-        status TEXT NOT NULL,
-        return_code INTEGER,
-        message TEXT,
-        stdout TEXT,
-        stderr TEXT,
-        exception TEXT,
-        warnings TEXT,
-        failed_task TEXT,
-        failed_task_module TEXT,
-        os_distribution TEXT,
-        os_version TEXT,
-        os_family TEXT,
-        os_system TEXT,
-        os_architecture TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_timestamp ON {{ execution_result_db_table_success }}(timestamp);
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_project ON {{ execution_result_db_table_success }}(project);
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_playbook ON {{ execution_result_db_table_success }}(playbook);
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-
-- name: Create failed_jobs table in SQLite
-  community.general.sqlite3:
-    db: "{{ execution_result_db_sqlite_path }}"
-    query: |
-      CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_failed }} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        hostname TEXT,
-        inventory_hostname TEXT,
-        ansible_host TEXT,
-        project TEXT,
-        organization TEXT,
-        job_template TEXT,
-        playbook TEXT,
-        scm_url TEXT,
-        scm_branch TEXT,
-        scm_revision TEXT,
-        execution_environment TEXT,
-        status TEXT NOT NULL,
-        return_code INTEGER,
-        message TEXT,
-        stdout TEXT,
-        stderr TEXT,
-        exception TEXT,
-        warnings TEXT,
-        failed_task TEXT,
-        failed_task_module TEXT,
-        os_distribution TEXT,
-        os_version TEXT,
-        os_family TEXT,
-        os_system TEXT,
-        os_architecture TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_timestamp ON {{ execution_result_db_table_failed }}(timestamp);
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_project ON {{ execution_result_db_table_failed }}(project);
-      CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_failed_task ON {{ execution_result_db_table_failed }}(failed_task);
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-
-- name: Insert successful execution results into SQLite
+- name: Execute SQLite database operations on localhost
   block:
+    - name: Skip SQLite tasks if no prepared records
+      ansible.builtin.meta: end_host
+      when: _execution_results_prepared | length == 0
+
+    - name: Verify SQLite database file exists
+      ansible.builtin.stat:
+        path: "{{ execution_result_db_sqlite_path }}"
+      register: _sqlite_db_file
+      run_once: true
+
+    - name: Fail if SQLite database file does not exist
+      ansible.builtin.fail:
+        msg: "SQLite database file '{{ execution_result_db_sqlite_path }}' does not exist. Please create it before using this role."
+      when: not _sqlite_db_file.stat.exists
+      run_once: true
+
+    - name: Verify success_jobs table exists
+      community.general.sqlite3:
+        db: "{{ execution_result_db_sqlite_path }}"
+        query: "SELECT name FROM sqlite_master WHERE type='table' AND name=?;"
+        args:
+          - "{{ execution_result_db_table_success }}"
+      register: _success_table_check
+      run_once: true
+
+    - name: Fail if success_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_success }}' does not exist in SQLite database '{{ execution_result_db_sqlite_path }}'. Please create it before using this role."
+      when: _success_table_check.query_result | length == 0
+      run_once: true
+
+    - name: Verify failed_jobs table exists
+      community.general.sqlite3:
+        db: "{{ execution_result_db_sqlite_path }}"
+        query: "SELECT name FROM sqlite_master WHERE type='table' AND name=?;"
+        args:
+          - "{{ execution_result_db_table_failed }}"
+      register: _failed_table_check
+      run_once: true
+
+    - name: Fail if failed_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_failed }}' does not exist in SQLite database '{{ execution_result_db_sqlite_path }}'. Please create it before using this role."
+      when: _failed_table_check.query_result | length == 0
+      run_once: true
+
     - name: Insert success records
       community.general.sqlite3:
         db: "{{ execution_result_db_sqlite_path }}"
@@ -141,13 +91,10 @@
       loop: "{{ _execution_results_success }}"
       loop_control:
         label: "{{ item.timestamp }} - {{ item.status }}"
-      delegate_to: localhost
       register: _insert_success_result
       ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-  when: _execution_results_success | length > 0
+      when: _execution_results_success | length > 0
 
-- name: Insert failed execution results into SQLite
-  block:
     - name: Insert failed records
       community.general.sqlite3:
         db: "{{ execution_result_db_sqlite_path }}"
@@ -190,18 +137,18 @@
       loop: "{{ _execution_results_failed }}"
       loop_control:
         label: "{{ item.timestamp }} - {{ item.status }}"
-      delegate_to: localhost
       register: _insert_failed_result
       ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-  when: _execution_results_failed | length > 0
+      when: _execution_results_failed | length > 0
 
-- name: Set records processed count
-  ansible.builtin.set_fact:
-    _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
 
-- name: Debug - Show insert results
-  ansible.builtin.debug:
-    msg: "Successfully inserted {{ _execution_results_success | length }} success record(s) and {{ _execution_results_failed | length }} failed record(s) into SQLite"
-  when:
-    - execution_result_debug_mode | bool
-    - _execution_result_records_processed | int > 0
+    - name: Debug - Show insert results
+      ansible.builtin.debug:
+        msg: "Successfully inserted {{ _execution_results_success | length }} success record(s) and {{ _execution_results_failed | length }} failed record(s) into SQLite"
+      when:
+        - execution_result_debug_mode | bool
+        - _execution_result_records_processed | int > 0
+  delegate_to: localhost

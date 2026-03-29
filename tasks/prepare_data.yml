@@ -1,81 +1,84 @@
 ---
 # tasks/prepare_data.yml - Prepare and validate data for database insertion
 
-- name: Initialize prepared records list
-  ansible.builtin.set_fact:
-    _execution_results_prepared: []
-    _execution_result_records_processed: 0
+- name: Prepare and validate data on localhost
+  block:
+    - name: Initialize prepared records list
+      ansible.builtin.set_fact:
+        _execution_results_prepared: []
+        _execution_result_records_processed: 0
 
-- name: Skip data preparation if no raw results
-  ansible.builtin.meta: end_host
-  when: _execution_results_raw | length == 0
+    - name: Skip data preparation if no raw results
+      ansible.builtin.meta: end_host
+      when: _execution_results_raw | length == 0
 
-- name: Prepare each execution result for database insertion
-  ansible.builtin.set_fact:
-    _execution_results_prepared: "{{ _execution_results_prepared + [_prepared_record] }}"
-  vars:
-    _prepared_record:
-      timestamp: "{{ item.timestamp | default(ansible_date_time.iso8601) }}"
-      hostname: "{{ ansible_hostname | default('') if execution_result_include_hostname else '' }}"
-      inventory_hostname: "{{ inventory_hostname | default('') if execution_result_include_inventory_hostname else '' }}"
-      ansible_host: "{{ ansible_host | default('') if execution_result_include_ansible_host else '' }}"
-      project: "{{ item.project | default('N/A') }}"
-      organization: "{{ item.organization | default('N/A') }}"
-      job_template: "{{ item.job_template | default('N/A') }}"
-      playbook: "{{ item.playbook | default('N/A') }}"
-      scm_url: "{{ item.scm_url | default('N/A') }}"
-      scm_branch: "{{ item.scm_branch | default('N/A') }}"
-      scm_revision: "{{ item.scm_revision | default('N/A') }}"
-      execution_environment: "{{ item.execution_environment | default('N/A') }}"
-      status: "{{ item.status | default('UNKNOWN') }}"
-      return_code: "{{ item.return_code | default(-1) }}"
-      message: "{{ (item.message | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.message | default('') | string) }}"
-      stdout: "{{ (item.stdout | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.stdout | default('') | string) }}"
-      stderr: "{{ (item.stderr | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.stderr | default('') | string) }}"
-      exception: "{{ (item.exception | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.exception | default('') | string) }}"
-      warnings: "{{ item.warnings | default([]) }}"
-      failed_task: "{{ item.failed_task | default('') }}"
-      failed_task_module: "{{ item.failed_task_module | default('') }}"
-      os_distribution: "{{ item.os_distribution | default('') }}"
-      os_version: "{{ item.os_version | default('') }}"
-      os_family: "{{ item.os_family | default('') }}"
-      os_system: "{{ item.os_system | default('') }}"
-      os_architecture: "{{ item.os_architecture | default('') }}"
-  loop: "{{ _execution_results_raw }}"
-  loop_control:
-    label: "{{ item.timestamp | default('unknown') }} - {{ item.status | default('UNKNOWN') }}"
+    - name: Prepare each execution result for database insertion
+      ansible.builtin.set_fact:
+        _execution_results_prepared: "{{ _execution_results_prepared + [_prepared_record] }}"
+      vars:
+        _prepared_record:
+          timestamp: "{{ item.timestamp | default(ansible_date_time.iso8601) }}"
+          hostname: "{{ ansible_hostname | default('') if execution_result_include_hostname else '' }}"
+          inventory_hostname: "{{ inventory_hostname | default('') if execution_result_include_inventory_hostname else '' }}"
+          ansible_host: "{{ ansible_host | default('') if execution_result_include_ansible_host else '' }}"
+          project: "{{ item.project | default('N/A') }}"
+          organization: "{{ item.organization | default('N/A') }}"
+          job_template: "{{ item.job_template | default('N/A') }}"
+          playbook: "{{ item.playbook | default('N/A') }}"
+          scm_url: "{{ item.scm_url | default('N/A') }}"
+          scm_branch: "{{ item.scm_branch | default('N/A') }}"
+          scm_revision: "{{ item.scm_revision | default('N/A') }}"
+          execution_environment: "{{ item.execution_environment | default('N/A') }}"
+          status: "{{ item.status | default('UNKNOWN') }}"
+          return_code: "{{ item.return_code | default(-1) }}"
+          message: "{{ (item.message | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.message | default('') | string) }}"
+          stdout: "{{ (item.stdout | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.stdout | default('') | string) }}"
+          stderr: "{{ (item.stderr | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.stderr | default('') | string) }}"
+          exception: "{{ (item.exception | default('') | string)[:execution_result_max_field_length] if execution_result_truncate_long_fields else (item.exception | default('') | string) }}"
+          warnings: "{{ item.warnings | default([]) }}"
+          failed_task: "{{ item.failed_task | default('') }}"
+          failed_task_module: "{{ item.failed_task_module | default('') }}"
+          os_distribution: "{{ item.os_distribution | default('') }}"
+          os_version: "{{ item.os_version | default('') }}"
+          os_family: "{{ item.os_family | default('') }}"
+          os_system: "{{ item.os_system | default('') }}"
+          os_architecture: "{{ item.os_architecture | default('') }}"
+      loop: "{{ _execution_results_raw }}"
+      loop_control:
+        label: "{{ item.timestamp | default('unknown') }} - {{ item.status | default('UNKNOWN') }}"
 
-- name: Debug - Show prepared records count
-  ansible.builtin.debug:
-    msg: "Prepared {{ _execution_results_prepared | length }} record(s) for database insertion"
-  when: execution_result_debug_mode | bool
+    - name: Debug - Show prepared records count
+      ansible.builtin.debug:
+        msg: "Prepared {{ _execution_results_prepared | length }} record(s) for database insertion"
+      when: execution_result_debug_mode | bool
 
-- name: Debug - Show first prepared record
-  ansible.builtin.debug:
-    var: _execution_results_prepared[0]
-  when:
-    - execution_result_debug_mode | bool
-    - _execution_results_prepared | length > 0
+    - name: Debug - Show first prepared record
+      ansible.builtin.debug:
+        var: _execution_results_prepared[0]
+      when:
+        - execution_result_debug_mode | bool
+        - _execution_results_prepared | length > 0
 
-- name: Validate prepared data
-  ansible.builtin.assert:
-    that:
-      - item.timestamp is defined
-      - item.status is defined
-      - item.status in ['SUCCESS', 'FAILURE', 'UNKNOWN']
-    fail_msg: "Invalid record data: missing required fields or invalid status"
-    success_msg: "Record validation passed"
-  loop: "{{ _execution_results_prepared }}"
-  loop_control:
-    label: "{{ item.timestamp }} - {{ item.status }}"
-  when: execution_result_validate_data | bool
+    - name: Validate prepared data
+      ansible.builtin.assert:
+        that:
+          - item.timestamp is defined
+          - item.status is defined
+          - item.status in ['SUCCESS', 'FAILURE', 'UNKNOWN']
+        fail_msg: "Invalid record data: missing required fields or invalid status"
+        success_msg: "Record validation passed"
+      loop: "{{ _execution_results_prepared }}"
+      loop_control:
+        label: "{{ item.timestamp }} - {{ item.status }}"
+      when: execution_result_validate_data | bool
 
-- name: Split records into success and failed lists
-  ansible.builtin.set_fact:
-    _execution_results_success: "{{ _execution_results_prepared | selectattr('status', 'equalto', 'SUCCESS') | list }}"
-    _execution_results_failed: "{{ _execution_results_prepared | rejectattr('status', 'equalto', 'SUCCESS') | list }}"
+    - name: Split records into success and failed lists
+      ansible.builtin.set_fact:
+        _execution_results_success: "{{ _execution_results_prepared | selectattr('status', 'equalto', 'SUCCESS') | list }}"
+        _execution_results_failed: "{{ _execution_results_prepared | rejectattr('status', 'equalto', 'SUCCESS') | list }}"
 
-- name: Debug - Show split record counts
-  ansible.builtin.debug:
-    msg: "Success: {{ _execution_results_success | length }}, Failed: {{ _execution_results_failed | length }}"
-  when: execution_result_debug_mode | bool
+    - name: Debug - Show split record counts
+      ansible.builtin.debug:
+        msg: "Success: {{ _execution_results_success | length }}, Failed: {{ _execution_results_failed | length }}"
+      when: execution_result_debug_mode | bool
+  delegate_to: localhost

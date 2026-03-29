@@ -1,6 +1,13 @@
 ---
 # vars/main.yml - Internal variables for execution-result-update-db role
 
+# Required Ansible collections by database type
+_execution_result_collection_map:
+  postgresql: community.postgresql
+  mysql: community.mysql
+  mongodb: community.mongodb
+  # sqlite doesn't require a collection
+
 # Database port defaults by type
 _execution_result_db_ports:
   postgresql: 5432

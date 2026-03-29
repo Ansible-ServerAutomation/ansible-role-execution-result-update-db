@@ -1,183 +1,207 @@
 ---
 # tasks/database_postgresql.yml - PostgreSQL specific tasks
 
-- name: Skip PostgreSQL tasks if no prepared records
-  ansible.builtin.meta: end_host
-  when: _execution_results_prepared | length == 0
-
-- name: Debug - Show database connection details
-  ansible.builtin.debug:
-    msg:
-      - "Connecting to PostgreSQL database"
-      - "Host: {{ execution_result_db_host }}"
-      - "Port: {{ execution_result_db_port }}"
-      - "Database: {{ execution_result_db_name }}"
-      - "User: {{ execution_result_db_user }}"
-      - "Password: {{ 'Provided' if execution_result_db_password else 'Not provided' }}"
-      - "Tables: {{ execution_result_db_table_success }}, {{ execution_result_db_table_failed }}"
-  when: execution_result_debug_mode | bool
-
-- name: Create database if it doesn't exist
-  community.postgresql.postgresql_db:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    name: "{{ execution_result_db_name }}"
-    state: present
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-
-- name: Create success_jobs table
-  community.postgresql.postgresql_query:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    db: "{{ execution_result_db_name }}"
-    query: "{{ _execution_result_db_create_success_table_sql.postgresql }}"
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-
-- name: Create failed_jobs table
-  community.postgresql.postgresql_query:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    db: "{{ execution_result_db_name }}"
-    query: "{{ _execution_result_db_create_failed_table_sql.postgresql }}"
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-
-- name: Insert successful execution results into PostgreSQL
+- name: Execute PostgreSQL database operations on localhost
   block:
-    - name: Insert success records
+    - name: Skip PostgreSQL tasks if no prepared records
+      ansible.builtin.meta: end_host
+      when: _execution_results_prepared | length == 0
+
+    - name: Debug - Show database connection details
+      ansible.builtin.debug:
+        msg:
+          - "Connecting to PostgreSQL database"
+          - "Host: {{ execution_result_db_host }}"
+          - "Port: {{ execution_result_db_port }}"
+          - "Database: {{ execution_result_db_name }}"
+          - "User: {{ execution_result_db_user }}"
+          - "Password: {{ 'Provided' if execution_result_db_password else 'Not provided' }}"
+          - "Tables: {{ execution_result_db_table_success }}, {{ execution_result_db_table_failed }}"
+      when: execution_result_debug_mode | bool
+
+    - name: Verify database exists
+      community.postgresql.postgresql_query:
+        login_host: "{{ execution_result_db_host }}"
+        login_port: "{{ execution_result_db_port }}"
+        login_user: "{{ execution_result_db_user }}"
+        login_password: "{{ execution_result_db_password }}"
+        db: postgres
+        query: "SELECT 1 FROM pg_database WHERE datname = %s"
+        positional_args:
+          - "{{ execution_result_db_name }}"
+      register: _db_exists_check
+      run_once: true
+
+    - name: Fail if database does not exist
+      ansible.builtin.fail:
+        msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
+      when: _db_exists_check.rowcount == 0
+      run_once: true
+
+    - name: Verify success_jobs table exists
       community.postgresql.postgresql_query:
         login_host: "{{ execution_result_db_host }}"
         login_port: "{{ execution_result_db_port }}"
         login_user: "{{ execution_result_db_user }}"
         login_password: "{{ execution_result_db_password }}"
         db: "{{ execution_result_db_name }}"
-        query: |
-          INSERT INTO {{ execution_result_db_table_success }} (
-            timestamp, hostname, inventory_hostname, ansible_host,
-            project, organization, job_template, playbook,
-            scm_url, scm_branch, scm_revision, execution_environment,
-            status, return_code, message, stdout, stderr, exception,
-            warnings, failed_task, failed_task_module,
-            os_distribution, os_version, os_family, os_system, os_architecture
-          ) VALUES (
-            %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
-            %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
-            %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
-            %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
-            %(warnings)s, %(failed_task)s, %(failed_task_module)s,
-            %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
-          )
-        named_args:
-          timestamp: "{{ item.timestamp }}"
-          hostname: "{{ item.hostname }}"
-          inventory_hostname: "{{ item.inventory_hostname }}"
-          ansible_host: "{{ item.ansible_host }}"
-          project: "{{ item.project }}"
-          organization: "{{ item.organization }}"
-          job_template: "{{ item.job_template }}"
-          playbook: "{{ item.playbook }}"
-          scm_url: "{{ item.scm_url }}"
-          scm_branch: "{{ item.scm_branch }}"
-          scm_revision: "{{ item.scm_revision }}"
-          execution_environment: "{{ item.execution_environment }}"
-          status: "{{ item.status }}"
-          return_code: "{{ item.return_code }}"
-          message: "{{ item.message }}"
-          stdout: "{{ item.stdout }}"
-          stderr: "{{ item.stderr }}"
-          exception: "{{ item.exception }}"
-          warnings: "{{ item.warnings | to_json }}"
-          failed_task: "{{ item.failed_task }}"
-          failed_task_module: "{{ item.failed_task_module }}"
-          os_distribution: "{{ item.os_distribution }}"
-          os_version: "{{ item.os_version }}"
-          os_family: "{{ item.os_family }}"
-          os_system: "{{ item.os_system }}"
-          os_architecture: "{{ item.os_architecture }}"
-      loop: "{{ _execution_results_success }}"
-      loop_control:
-        label: "{{ item.timestamp }} - {{ item.status }}"
-      delegate_to: localhost
-      register: _insert_success_result
-      ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-  when:
-    - execution_result_batch_insert | bool
-    - _execution_results_success | length > 0
+        query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
+        positional_args:
+          - "{{ execution_result_db_table_success }}"
+      register: _success_table_exists
+      run_once: true
 
-- name: Insert failed execution results into PostgreSQL
-  block:
-    - name: Insert failed records
+    - name: Fail if success_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
+      when: _success_table_exists.rowcount == 0
+      run_once: true
+
+    - name: Verify failed_jobs table exists
       community.postgresql.postgresql_query:
         login_host: "{{ execution_result_db_host }}"
         login_port: "{{ execution_result_db_port }}"
         login_user: "{{ execution_result_db_user }}"
         login_password: "{{ execution_result_db_password }}"
         db: "{{ execution_result_db_name }}"
-        query: |
-          INSERT INTO {{ execution_result_db_table_failed }} (
-            timestamp, hostname, inventory_hostname, ansible_host,
-            project, organization, job_template, playbook,
-            scm_url, scm_branch, scm_revision, execution_environment,
-            status, return_code, message, stdout, stderr, exception,
-            warnings, failed_task, failed_task_module,
-            os_distribution, os_version, os_family, os_system, os_architecture
-          ) VALUES (
-            %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
-            %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
-            %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
-            %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
-            %(warnings)s, %(failed_task)s, %(failed_task_module)s,
-            %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
-          )
-        named_args:
-          timestamp: "{{ item.timestamp }}"
-          hostname: "{{ item.hostname }}"
-          inventory_hostname: "{{ item.inventory_hostname }}"
-          ansible_host: "{{ item.ansible_host }}"
-          project: "{{ item.project }}"
-          organization: "{{ item.organization }}"
-          job_template: "{{ item.job_template }}"
-          playbook: "{{ item.playbook }}"
-          scm_url: "{{ item.scm_url }}"
-          scm_branch: "{{ item.scm_branch }}"
-          scm_revision: "{{ item.scm_revision }}"
-          execution_environment: "{{ item.execution_environment }}"
-          status: "{{ item.status }}"
-          return_code: "{{ item.return_code }}"
-          message: "{{ item.message }}"
-          stdout: "{{ item.stdout }}"
-          stderr: "{{ item.stderr }}"
-          exception: "{{ item.exception }}"
-          warnings: "{{ item.warnings | to_json }}"
-          failed_task: "{{ item.failed_task }}"
-          failed_task_module: "{{ item.failed_task_module }}"
-          os_distribution: "{{ item.os_distribution }}"
-          os_version: "{{ item.os_version }}"
-          os_family: "{{ item.os_family }}"
-          os_system: "{{ item.os_system }}"
-          os_architecture: "{{ item.os_architecture }}"
-      loop: "{{ _execution_results_failed }}"
-      loop_control:
-        label: "{{ item.timestamp }} - {{ item.status }}"
-      delegate_to: localhost
-      register: _insert_failed_result
-      ignore_errors: "{{ not execution_result_fail_on_db_error }}"
-  when:
-    - execution_result_batch_insert | bool
-    - _execution_results_failed | length > 0
+        query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
+        positional_args:
+          - "{{ execution_result_db_table_failed }}"
+      register: _failed_table_exists
+      run_once: true
 
-- name: Set records processed count
+    - name: Fail if failed_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
+      when: _failed_table_exists.rowcount == 0
+      run_once: true
+
+    - name: Insert successful execution results into PostgreSQL
+      block:
+        - name: Insert success records
+          community.postgresql.postgresql_query:
+            login_host: "{{ execution_result_db_host }}"
+            login_port: "{{ execution_result_db_port }}"
+            login_user: "{{ execution_result_db_user }}"
+            login_password: "{{ execution_result_db_password }}"
+            db: "{{ execution_result_db_name }}"
+            query: |
+              INSERT INTO {{ execution_result_db_table_success }} (
+                timestamp, hostname, inventory_hostname, ansible_host,
+                project, organization, job_template, playbook,
+                scm_url, scm_branch, scm_revision, execution_environment,
+                status, return_code, message, stdout, stderr, exception,
+                warnings, failed_task, failed_task_module,
+                os_distribution, os_version, os_family, os_system, os_architecture
+              ) VALUES (
+                %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
+                %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
+                %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
+                %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
+                %(warnings)s, %(failed_task)s, %(failed_task_module)s,
+                %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
+              )
+            named_args:
+              timestamp: "{{ item.timestamp }}"
+              hostname: "{{ item.hostname }}"
+              inventory_hostname: "{{ item.inventory_hostname }}"
+              ansible_host: "{{ item.ansible_host }}"
+              project: "{{ item.project }}"
+              organization: "{{ item.organization }}"
+              job_template: "{{ item.job_template }}"
+              playbook: "{{ item.playbook }}"
+              scm_url: "{{ item.scm_url }}"
+              scm_branch: "{{ item.scm_branch }}"
+              scm_revision: "{{ item.scm_revision }}"
+              execution_environment: "{{ item.execution_environment }}"
+              status: "{{ item.status }}"
+              return_code: "{{ item.return_code }}"
+              message: "{{ item.message }}"
+              stdout: "{{ item.stdout }}"
+              stderr: "{{ item.stderr }}"
+              exception: "{{ item.exception }}"
+              warnings: "{{ item.warnings | to_json }}"
+              failed_task: "{{ item.failed_task }}"
+              failed_task_module: "{{ item.failed_task_module }}"
+              os_distribution: "{{ item.os_distribution }}"
+              os_version: "{{ item.os_version }}"
+              os_family: "{{ item.os_family }}"
+              os_system: "{{ item.os_system }}"
+              os_architecture: "{{ item.os_architecture }}"
+          loop: "{{ _execution_results_success }}"
+          loop_control:
+            label: "{{ item.timestamp }} - {{ item.status }}"
+          register: _insert_success_result
+          ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+      when:
+        - execution_result_batch_insert | bool
+        - _execution_results_success | length > 0
+
+    - name: Insert failed execution results into PostgreSQL
+      block:
+        - name: Insert failed records
+          community.postgresql.postgresql_query:
+            login_host: "{{ execution_result_db_host }}"
+            login_port: "{{ execution_result_db_port }}"
+            login_user: "{{ execution_result_db_user }}"
+            login_password: "{{ execution_result_db_password }}"
+            db: "{{ execution_result_db_name }}"
+            query: |
+              INSERT INTO {{ execution_result_db_table_failed }} (
+                timestamp, hostname, inventory_hostname, ansible_host,
+                project, organization, job_template, playbook,
+                scm_url, scm_branch, scm_revision, execution_environment,
+                status, return_code, message, stdout, stderr, exception,
+                warnings, failed_task, failed_task_module,
+                os_distribution, os_version, os_family, os_system, os_architecture
+              ) VALUES (
+                %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
+                %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
+                %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
+                %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
+                %(warnings)s, %(failed_task)s, %(failed_task_module)s,
+                %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
+              )
+            named_args:
+              timestamp: "{{ item.timestamp }}"
+              hostname: "{{ item.hostname }}"
+              inventory_hostname: "{{ item.inventory_hostname }}"
+              ansible_host: "{{ item.ansible_host }}"
+              project: "{{ item.project }}"
+              organization: "{{ item.organization }}"
+              job_template: "{{ item.job_template }}"
+              playbook: "{{ item.playbook }}"
+              scm_url: "{{ item.scm_url }}"
+              scm_branch: "{{ item.scm_branch }}"
+              scm_revision: "{{ item.scm_revision }}"
+              execution_environment: "{{ item.execution_environment }}"
+              status: "{{ item.status }}"
+              return_code: "{{ item.return_code }}"
+              message: "{{ item.message }}"
+              stdout: "{{ item.stdout }}"
+              stderr: "{{ item.stderr }}"
+              exception: "{{ item.exception }}"
+              warnings: "{{ item.warnings | to_json }}"
+              failed_task: "{{ item.failed_task }}"
+              failed_task_module: "{{ item.failed_task_module }}"
+              os_distribution: "{{ item.os_distribution }}"
+              os_version: "{{ item.os_version }}"
+              os_family: "{{ item.os_family }}"
+              os_system: "{{ item.os_system }}"
+              os_architecture: "{{ item.os_architecture }}"
+          loop: "{{ _execution_results_failed }}"
+          loop_control:
+            label: "{{ item.timestamp }} - {{ item.status }}"
+          register: _insert_failed_result
+          ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+      when:
+        - execution_result_batch_insert | bool
+        - _execution_results_failed | length > 0
+
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+  delegate_to: localhost
   ansible.builtin.set_fact:
     _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
 

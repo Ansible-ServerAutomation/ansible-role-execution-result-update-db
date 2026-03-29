@@ -1,57 +1,82 @@
 ---
 # tasks/database_mysql.yml - MySQL specific tasks
 
-- name: Skip MySQL tasks if no prepared records
-  ansible.builtin.meta: end_host
-  when: _execution_results_prepared | length == 0
+- name: Execute MySQL database operations on localhost
+  block:
+    - name: Skip MySQL tasks if no prepared records
+      ansible.builtin.meta: end_host
+      when: _execution_results_prepared | length == 0
 
-- name: Debug - Show database connection details
-  ansible.builtin.debug:
-    msg:
-      - "Connecting to MySQL database"
-      - "Host: {{ execution_result_db_host }}"
-      - "Port: {{ execution_result_db_port }}"
-      - "Database: {{ execution_result_db_name }}"
-      - "User: {{ execution_result_db_user }}"
-      - "Password: {{ 'Provided' if execution_result_db_password else 'Not provided' }}"
-      - "Tables: {{ execution_result_db_table_success }}, {{ execution_result_db_table_failed }}"
-  when: execution_result_debug_mode | bool
+    - name: Debug - Show database connection details
+      ansible.builtin.debug:
+        msg:
+          - "Connecting to MySQL database"
+          - "Host: {{ execution_result_db_host }}"
+          - "Port: {{ execution_result_db_port }}"
+          - "Database: {{ execution_result_db_name }}"
+          - "User: {{ execution_result_db_user }}"
+          - "Password: {{ 'Provided' if execution_result_db_password else 'Not provided' }}"
+          - "Tables: {{ execution_result_db_table_success }}, {{ execution_result_db_table_failed }}"
+      when: execution_result_debug_mode | bool
 
-- name: Create database if it doesn't exist
-  community.mysql.mysql_db:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    name: "{{ execution_result_db_name }}"
-    state: present
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+    - name: Verify database exists
+      community.mysql.mysql_query:
+        login_host: "{{ execution_result_db_host }}"
+        login_port: "{{ execution_result_db_port }}"
+        login_user: "{{ execution_result_db_user }}"
+        login_password: "{{ execution_result_db_password }}"
+        login_db: information_schema
+        query: "SELECT SCHEMA_NAME FROM SCHEMATA WHERE SCHEMA_NAME = %s"
+        positional_args:
+          - "{{ execution_result_db_name }}"
+      register: _db_exists_check
+      run_once: true
 
-- name: Create success_jobs table
-  community.mysql.mysql_query:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    login_db: "{{ execution_result_db_name }}"
-    query: "{{ _execution_result_db_create_success_table_sql.mysql }}"
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+    - name: Fail if database does not exist
+      ansible.builtin.fail:
+        msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
+      when: _db_exists_check.rowcount[0] == 0
+      run_once: true
 
-- name: Create failed_jobs table
-  community.mysql.mysql_query:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    login_db: "{{ execution_result_db_name }}"
-    query: "{{ _execution_result_db_create_failed_table_sql.mysql }}"
-  delegate_to: localhost
-  run_once: true
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+    - name: Verify success_jobs table exists
+      community.mysql.mysql_query:
+        login_host: "{{ execution_result_db_host }}"
+        login_port: "{{ execution_result_db_port }}"
+        login_user: "{{ execution_result_db_user }}"
+        login_password: "{{ execution_result_db_password }}"
+        login_db: "{{ execution_result_db_name }}"
+        query: "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s"
+        positional_args:
+          - "{{ execution_result_db_name }}"
+          - "{{ execution_result_db_table_success }}"
+      register: _success_table_exists
+      run_once: true
+
+    - name: Fail if success_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
+      when: _success_table_exists.rowcount[0] == 0
+      run_once: true
+
+    - name: Verify failed_jobs table exists
+      community.mysql.mysql_query:
+        login_host: "{{ execution_result_db_host }}"
+        login_port: "{{ execution_result_db_port }}"
+        login_user: "{{ execution_result_db_user }}"
+        login_password: "{{ execution_result_db_password }}"
+        login_db: "{{ execution_result_db_name }}"
+        query: "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s"
+        positional_args:
+          - "{{ execution_result_db_name }}"
+          - "{{ execution_result_db_table_failed }}"
+      register: _failed_table_exists
+      run_once: true
+
+    - name: Fail if failed_jobs table does not exist
+      ansible.builtin.fail:
+        msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
+      when: _failed_table_exists.rowcount[0] == 0
+      run_once: true
 
 - name: Insert successful execution results into MySQL
   block:
@@ -167,13 +192,14 @@
     - execution_result_batch_insert | bool
     - _execution_results_failed | length > 0
 
-- name: Set records processed count
-  ansible.builtin.set_fact:
-    _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
 
-- name: Debug - Show insert results
-  ansible.builtin.debug:
-    msg: "Successfully inserted {{ _execution_results_success | length }} success record(s) and {{ _execution_results_failed | length }} failed record(s) into MySQL"
-  when:
-    - execution_result_debug_mode | bool
-    - _execution_result_records_processed | int > 0
+    - name: Debug - Show insert results
+      ansible.builtin.debug:
+        msg: "Successfully inserted {{ _execution_results_success | length }} success record(s) and {{ _execution_results_failed | length }} failed record(s) into MySQL"
+      when:
+        - execution_result_debug_mode | bool
+        - _execution_result_records_processed | int > 0
+  delegate_to: localhost

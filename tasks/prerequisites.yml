@@ -1,71 +1,96 @@
 ---
 # tasks/prerequisites.yml - Check prerequisites for database operations
 
-- name: Check if required Python packages are installed (PostgreSQL)
+- name: Run prerequisite checks on localhost
   block:
-    - name: Verify psycopg2 is available
-      ansible.builtin.command: python3 -c "import psycopg2"
-      register: _check_psycopg2
-      changed_when: false
-      failed_when: false
-      
-    - name: Warn if psycopg2 is not available
-      ansible.builtin.debug:
-        msg: "WARNING: psycopg2-binary is required for PostgreSQL. Install with: pip install psycopg2-binary"
-      when: _check_psycopg2.rc != 0
-  when: execution_result_db_type == 'postgresql'
+    - name: Check if required Python packages are installed (PostgreSQL)
+      block:
+        - name: Verify psycopg2 is available
+          ansible.builtin.command: python3 -c "import psycopg2"
+          register: _check_psycopg2
+          changed_when: false
+          failed_when: false
+          
+        - name: Warn if psycopg2 is not available
+          ansible.builtin.debug:
+            msg: "WARNING: psycopg2-binary is required for PostgreSQL. Install with: pip install psycopg2-binary"
+          when: _check_psycopg2.rc != 0
+      when: execution_result_db_type == 'postgresql'
 
-- name: Check if required Python packages are installed (MySQL)
-  block:
-    - name: Verify PyMySQL is available
-      ansible.builtin.command: python3 -c "import pymysql"
-      register: _check_pymysql
-      changed_when: false
-      failed_when: false
-      
-    - name: Warn if PyMySQL is not available
-      ansible.builtin.debug:
-        msg: "WARNING: PyMySQL is required for MySQL. Install with: pip install PyMySQL"
-      when: _check_pymysql.rc != 0
-  when: execution_result_db_type == 'mysql'
+    - name: Check if required Python packages are installed (MySQL)
+      block:
+        - name: Verify PyMySQL is available
+          ansible.builtin.command: python3 -c "import pymysql"
+          register: _check_pymysql
+          changed_when: false
+          failed_when: false
+          
+        - name: Warn if PyMySQL is not available
+          ansible.builtin.debug:
+            msg: "WARNING: PyMySQL is required for MySQL. Install with: pip install PyMySQL"
+          when: _check_pymysql.rc != 0
+      when: execution_result_db_type == 'mysql'
 
-- name: Check if required Python packages are installed (MongoDB)
-  block:
-    - name: Verify pymongo is available
-      ansible.builtin.command: python3 -c "import pymongo"
-      register: _check_pymongo
-      changed_when: false
-      failed_when: false
-      
-    - name: Warn if pymongo is not available
-      ansible.builtin.debug:
-        msg: "WARNING: pymongo is required for MongoDB. Install with: pip install pymongo"
-      when: _check_pymongo.rc != 0
-  when: execution_result_db_type == 'mongodb'
+    - name: Check if required Python packages are installed (MongoDB)
+      block:
+        - name: Verify pymongo is available
+          ansible.builtin.command: python3 -c "import pymongo"
+          register: _check_pymongo
+          changed_when: false
+          failed_when: false
+          
+        - name: Warn if pymongo is not available
+          ansible.builtin.debug:
+            msg: "WARNING: pymongo is required for MongoDB. Install with: pip install pymongo"
+          when: _check_pymongo.rc != 0
+      when: execution_result_db_type == 'mongodb'
 
-- name: Check database connectivity (PostgreSQL)
-  community.postgresql.postgresql_ping:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    db: "{{ execution_result_db_name }}"
-  register: _db_ping_result
-  when:
-    - execution_result_db_type == 'postgresql'
-    - _check_psycopg2.rc == 0
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+    - name: Check database connectivity (PostgreSQL)
+      block:
+        - name: Test PostgreSQL connection
+          community.postgresql.postgresql_ping:
+            login_host: "{{ execution_result_db_host }}"
+            login_port: "{{ execution_result_db_port }}"
+            login_user: "{{ execution_result_db_user }}"
+            login_password: "{{ execution_result_db_password }}"
+            db: "{{ execution_result_db_name }}"
+          register: _db_ping_result
+          ignore_errors: true
 
-- name: Check database connectivity (MySQL)
-  community.mysql.mysql_info:
-    login_host: "{{ execution_result_db_host }}"
-    login_port: "{{ execution_result_db_port }}"
-    login_user: "{{ execution_result_db_user }}"
-    login_password: "{{ execution_result_db_password }}"
-    login_db: "{{ execution_result_db_name }}"
-    filter: version
-  register: _db_ping_result
-  when:
-    - execution_result_db_type == 'mysql'
-    - _check_pymysql.rc == 0
-  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+        - name: Debug - PostgreSQL connectivity result
+          ansible.builtin.debug:
+            msg: "PostgreSQL connection {{ 'successful' if _db_ping_result is success else 'failed' }}"
+          when: execution_result_debug_mode | bool
+      rescue:
+        - name: Warn about PostgreSQL connectivity check failure
+          ansible.builtin.debug:
+            msg: "WARNING: Could not check PostgreSQL connectivity. Ensure community.postgresql collection is installed."
+      when:
+        - execution_result_db_type == 'postgresql'
+        - _check_psycopg2.rc == 0
+
+    - name: Check database connectivity (MySQL)
+      block:
+        - name: Test MySQL connection
+          community.mysql.mysql_info:
+            login_host: "{{ execution_result_db_host }}"
+            login_port: "{{ execution_result_db_port }}"
+            login_user: "{{ execution_result_db_user }}"
+            login_password: "{{ execution_result_db_password }}"
+            login_db: "{{ execution_result_db_name }}"
+            filter: version
+          register: _db_ping_result
+          ignore_errors: true
+
+        - name: Debug - MySQL connectivity result
+          ansible.builtin.debug:
+            msg: "MySQL connection {{ 'successful' if _db_ping_result is success else 'failed' }}"
+          when: execution_result_debug_mode | bool
+      rescue:
+        - name: Warn about MySQL connectivity check failure
+          ansible.builtin.debug:
+            msg: "WARNING: Could not check MySQL connectivity. Ensure community.mysql collection is installed."
+      when:
+        - execution_result_db_type == 'mysql'
+        - _check_pymysql.rc == 0
+  delegate_to: localhost

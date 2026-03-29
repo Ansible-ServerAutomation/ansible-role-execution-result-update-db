@@ -1,15 +1,20 @@
 ---
 # defaults/main.yml - Default variables for execution-result-update-db role
 
+# IMPORTANT: This role requires that the database and tables already exist.
+# The role will VERIFY their existence and FAIL if they are not found.
+# It will NOT create databases or tables automatically.
+# See README.md "Database Setup" section for DDL scripts.
+
 # Database configuration
 execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
 execution_result_db_host: "10.0.0.14"
 execution_result_db_port: 5432
-execution_result_db_name: "ansible_execution_results"
+execution_result_db_name: "ansible_execution_results"  # Must already exist
 execution_result_db_user: '{{ lookup("env", "ANSIBLE_NET_USERNAME") }}'
 execution_result_db_password: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") }}'
-execution_result_db_table_success: "success_jobs"
-execution_result_db_table_failed: "failed_jobs"
+execution_result_db_table_success: "success_jobs"      # Must already exist - receives records with return_code=0
+execution_result_db_table_failed: "failed_jobs"        # Must already exist - receives records with return_code!=0
 
 # SQLite specific
 execution_result_db_sqlite_path: "/var/lib/ansible/execution_results.db"
