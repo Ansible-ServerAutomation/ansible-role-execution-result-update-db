@@ -22,8 +22,14 @@
     - name: Verify database exists using Python
       ansible.builtin.shell: |
         python3 << 'EOF'
-        import psycopg2
         import sys
+        try:
+            import psycopg2
+        except ImportError as e:
+            print(f'ERROR: psycopg2 module not found: {e}')
+            print('Please install psycopg2-binary: pip install psycopg2-binary')
+            sys.exit(2)
+        
         try:
             conn = psycopg2.connect(
                 host='{{ execution_result_db_host }}',
@@ -45,26 +51,48 @@
                 print('NOT_FOUND')
                 sys.exit(1)
         except Exception as e:
-            print(f'ERROR: {e}')
+            print(f'ERROR: Database check failed: {e}')
             sys.exit(2)
         EOF
       register: _db_exists_check
       changed_when: false
-      failed_when: _db_exists_check.rc == 2
-      no_log: true
+      failed_when: false
+      no_log: false
+      run_once: true
+
+    - name: Debug - Show database check result
+      ansible.builtin.debug:
+        msg:
+          - "Database check return code: {{ _db_exists_check.rc }}"
+          - "Database check stdout: {{ _db_exists_check.stdout_lines }}"
+          - "Database check stderr: {{ _db_exists_check.stderr_lines | default([]) }}"
+      when: _db_exists_check.rc != 0
+
+    - name: Fail if psycopg2 is not available
+      ansible.builtin.fail:
+        msg: 
+          - "psycopg2 module is not installed on localhost."
+          - "Install it with: pip install psycopg2-binary"
+          - "Output: {{ _db_exists_check.stdout }}"
+      when: _db_exists_check.rc == 2
       run_once: true
 
     - name: Fail if database does not exist
       ansible.builtin.fail:
-        msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
-      when: _db_exists_check.rc != 0
+        msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role. Check output: {{ _db_exists_check.stdout }}"
+      when: _db_exists_check.rc == 1
       run_once: true
 
     - name: Verify success_jobs table exists using Python
       ansible.builtin.shell: |
         python3 << 'EOF'
-        import psycopg2
         import sys
+        try:
+            import psycopg2
+        except ImportError as e:
+            print(f'ERROR: psycopg2 not found: {e}')
+            sys.exit(2)
+        
         try:
             conn = psycopg2.connect(
                 host='{{ execution_result_db_host }}',
@@ -91,21 +119,26 @@
         EOF
       register: _success_table_exists
       changed_when: false
-      failed_when: _success_table_exists.rc == 2
-      no_log: true
+      failed_when: false
+      no_log: false
       run_once: true
 
     - name: Fail if success_jobs table does not exist
       ansible.builtin.fail:
-        msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
-      when: _success_table_exists.rc != 0
+        msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role. Output: {{ _success_table_exists.stdout }}"
+      when: _success_table_exists.rc == 1
       run_once: true
 
     - name: Verify failed_jobs table exists using Python
       ansible.builtin.shell: |
         python3 << 'EOF'
-        import psycopg2
         import sys
+        try:
+            import psycopg2
+        except ImportError as e:
+            print(f'ERROR: psycopg2 not found: {e}')
+            sys.exit(2)
+        
         try:
             conn = psycopg2.connect(
                 host='{{ execution_result_db_host }}',
@@ -132,14 +165,14 @@
         EOF
       register: _failed_table_exists
       changed_when: false
-      failed_when: _failed_table_exists.rc == 2
-      no_log: true
+      failed_when: false
+      no_log: false
       run_once: true
 
     - name: Fail if failed_jobs table does not exist
       ansible.builtin.fail:
-        msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
-      when: _failed_table_exists.rc != 0
+        msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role. Output: {{ _failed_table_exists.stdout }}"
+      when: _failed_table_exists.rc == 1
       run_once: true
 
     - name: Insert successful execution results into PostgreSQL using Python
