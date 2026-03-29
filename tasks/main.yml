@@ -41,6 +41,16 @@
         - execution_result_debug_mode | bool
         - execution_result_db_type in _execution_result_collection_map
 
+    - name: Display collection installation notice
+      ansible.builtin.debug:
+        msg:
+          - "NOTICE: Collection {{ _execution_result_collection_map[execution_result_db_type] }} was just installed."
+          - "If you encounter module resolution errors, the collection may not be available in the current execution context."
+          - "For best results, pre-install collections in your execution environment."
+      when:
+        - _collection_install is changed
+        - execution_result_db_type in _execution_result_collection_map
+
     - name: Include prerequisite tasks
       ansible.builtin.include_tasks: prerequisites.yml
 
@@ -51,7 +61,28 @@
       ansible.builtin.include_tasks: prepare_data.yml
 
     - name: Include database-specific tasks
-      ansible.builtin.include_tasks: "database_{{ execution_result_db_type }}.yml"
+      block:
+        - name: Execute database operations
+          ansible.builtin.include_tasks: "database_{{ execution_result_db_type }}.yml"
+      rescue:
+        - name: Handle database operation failure
+          ansible.builtin.fail:
+            msg:
+              - "Failed to execute database operations for {{ execution_result_db_type }}."
+              - "If the error mentions 'couldn't resolve module/action', the required collection may not be available."
+              - "Required collection: {{ _execution_result_collection_map[execution_result_db_type] | default('none') }}"
+              - "Solution: Pre-install the collection in your execution environment or run the playbook again."
+              - "For AWX/Tower: Add the collection to your execution environment image."
+              - "Original error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          when: execution_result_fail_on_db_error | bool
+
+        - name: Warn about database operation failure
+          ansible.builtin.debug:
+            msg:
+              - "WARNING: Database operation failed for {{ execution_result_db_type }}."
+              - "Continuing because execution_result_fail_on_db_error is false."
+              - "Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          when: not (execution_result_fail_on_db_error | bool)
 
     - name: Debug - Show role execution complete
       ansible.builtin.debug:

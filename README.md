@@ -987,25 +987,37 @@ pip install pymongo
 
 ### Missing Ansible Collections Error
 
-**Error**: `couldn't resolve module/action 'community.postgresql.postgresql_ping'`
+**Error**: `couldn't resolve module/action 'community.postgresql.postgresql_ping'` or similar collection module errors
 
-This error occurs when required Ansible collections are not installed, typically in AWX execution environments.
+**Important Update**: As of the latest version, database connectivity checks use Python directly and **do not require** Ansible collections to be pre-installed. However, the actual database operations (insert, query) still require the appropriate Ansible collections.
+
+**When This Occurs**:
+- Collections are installed during playbook execution but not available in the current Ansible execution context
+- Collections are not pre-installed in AWX/Tower execution environments
+- Collection paths are not properly configured
 
 **Solutions**:
 
-1. **For AWX/Tower**: Install collections in your execution environment (see [AWX Execution Environment Setup](#awx-execution-environment-setup))
+1. **For AWX/Tower (Recommended)**: Pre-install collections in your execution environment (see [AWX Execution Environment Setup](#awx-execution-environment-setup))
+   - This ensures collections are available before playbook execution
+   - Avoids runtime installation and context issues
 
-2. **For standalone Ansible**: Install collections manually:
+2. **For standalone Ansible**: Install collections before running the playbook:
    ```bash
    ansible-galaxy collection install community.postgresql community.mysql community.general community.mongodb
    ```
 
-3. **Quick verification**:
+3. **If error persists after installation**: The collection may not be loaded in the current execution context. Try:
+   - Re-run the playbook (collections installed in first run are available in subsequent runs)
+   - Pre-install collections in your Ansible installation directory
+   - For AWX: Rebuild your execution environment with collections included
+
+4. **Quick verification**:
    ```bash
    ansible-galaxy collection list | grep community
    ```
 
-4. **Temporary workaround**: The role will now gracefully warn about missing collections instead of failing, but database operations will still fail if collections are unavailable.
+**Note**: The role attempts to install missing collections automatically, but this may not make them immediately available. For production use, always pre-install collections in your execution environment.
 
 ## License
 

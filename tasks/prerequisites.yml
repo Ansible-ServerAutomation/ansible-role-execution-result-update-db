@@ -47,49 +47,60 @@
 
     - name: Check database connectivity (PostgreSQL)
       block:
-        - name: Test PostgreSQL connection
-          community.postgresql.postgresql_ping:
-            login_host: "{{ execution_result_db_host }}"
-            login_port: "{{ execution_result_db_port }}"
-            login_user: "{{ execution_result_db_user }}"
-            login_password: "{{ execution_result_db_password }}"
-            db: "{{ execution_result_db_name }}"
+        - name: Test PostgreSQL connection using Python
+          ansible.builtin.command:
+            cmd: >
+              python3 -c "import psycopg2; conn = psycopg2.connect(
+              host='{{ execution_result_db_host }}',
+              port={{ execution_result_db_port }},
+              user='{{ execution_result_db_user }}',
+              password='{{ execution_result_db_password }}',
+              database='{{ execution_result_db_name }}',
+              connect_timeout=10); conn.close(); print('SUCCESS')"
           register: _db_ping_result
-          ignore_errors: true
+          changed_when: false
+          failed_when: false
+          no_log: true
 
         - name: Debug - PostgreSQL connectivity result
           ansible.builtin.debug:
-            msg: "PostgreSQL connection {{ 'successful' if _db_ping_result is success else 'failed' }}"
+            msg: "PostgreSQL connection {{ 'successful' if _db_ping_result.rc == 0 else 'failed' }}"
           when: execution_result_debug_mode | bool
-      rescue:
-        - name: Warn about PostgreSQL connectivity check failure
+
+        - name: Warn if PostgreSQL connection failed
           ansible.builtin.debug:
-            msg: "WARNING: Could not check PostgreSQL connectivity. Ensure community.postgresql collection is installed."
+            msg: "WARNING: PostgreSQL connectivity check failed. Please verify database credentials and connectivity."
+          when: _db_ping_result.rc != 0
       when:
         - execution_result_db_type == 'postgresql'
         - _check_psycopg2.rc == 0
 
     - name: Check database connectivity (MySQL)
       block:
-        - name: Test MySQL connection
-          community.mysql.mysql_info:
-            login_host: "{{ execution_result_db_host }}"
-            login_port: "{{ execution_result_db_port }}"
-            login_user: "{{ execution_result_db_user }}"
-            login_password: "{{ execution_result_db_password }}"
-            login_db: "{{ execution_result_db_name }}"
-            filter: version
+        - name: Test MySQL connection using Python
+          ansible.builtin.command:
+            cmd: >
+              python3 -c "import pymysql; conn = pymysql.connect(
+              host='{{ execution_result_db_host }}',
+              port={{ execution_result_db_port }},
+              user='{{ execution_result_db_user }}',
+              password='{{ execution_result_db_password }}',
+              database='{{ execution_result_db_name }}',
+              connect_timeout=10); conn.close(); print('SUCCESS')"
           register: _db_ping_result
-          ignore_errors: true
+          changed_when: false
+          failed_when: false
+          no_log: true
 
         - name: Debug - MySQL connectivity result
           ansible.builtin.debug:
-            msg: "MySQL connection {{ 'successful' if _db_ping_result is success else 'failed' }}"
+            msg: "MySQL connection {{ 'successful' if _db_ping_result.rc == 0 else 'failed' }}"
           when: execution_result_debug_mode | bool
-      rescue:
-        - name: Warn about MySQL connectivity check failure
+
+        - name: Warn if MySQL connection failed
           ansible.builtin.debug:
-            msg: "WARNING: Could not check MySQL connectivity. Ensure community.mysql collection is installed."
+            msg: "WARNING: MySQL connectivity check failed. Please verify database credentials and connectivity."
+          when: _db_ping_result.rc != 0
       when:
         - execution_result_db_type == 'mysql'
         - _check_pymysql.rc == 0
