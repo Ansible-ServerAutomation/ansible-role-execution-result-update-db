@@ -5,6 +5,7 @@
 1. `couldn't resolve module/action 'community.postgresql.postgresql_ping'` (prerequisites.yml)
 2. `'ansible.builtin.set_fact' is not a valid attribute for a Block` (database_postgresql.yml)
 3. `couldn't resolve module/action 'community.postgresql.postgresql_query'` (database_postgresql.yml)
+4. **NEW**: Missing error handling for invalid Python interpreter path (database_postgresql.yml)
 
 ## Problem 1: Collection Module Resolution Error
 
@@ -343,3 +344,219 @@ No migration required. This is a backward-compatible bug fix that:
 - Provides better error messages and guidance
 
 Users who have already pre-installed collections in their environments will see no behavioral changes.
+
+---
+
+## Problem 4: Missing Error Handling for Invalid Python Interpreter Path
+
+**Date**: March 30, 2026  
+**Job**: #135  
+**Error Observed**:
+
+```
+TASK [update-db : Verify database exists using Python] *************************
+ok: [Ubuntu -> localhost]
+
+TASK [update-db : Debug - Show database check result] **************************
+ok: [Ubuntu -> localhost] => {
+    "msg": [
+        "Database check return code: 127",
+        "Database check stdout: []",
+        "Database check stderr: ['/bin/sh: line 1: /home/ubuntu/ansible_python_venv/bin/python: No such file or directory']"
+    ]
+}
+```
+
+### Root Cause
+
+When `execution_result_python_interpreter` is configured with an invalid or non-existent path (e.g., `/home/ubuntu/ansible_python_venv/bin/python`), the shell command returns exit code **127** (command not found).
+
+However, the role only had error handling for:
+- `rc == 2` → psycopg2 module not installed
+- `rc == 1` → database does not exist
+
+**Missing**: Error handling for `rc == 127` → Python interpreter not found
+
+This caused the playbook to continue execution despite the invalid interpreter, leading to:
+1. Confusing error messages in subsequent tasks
+2. Database operations failing silently
+3. No clear indication of the configuration problem
+
+### Impact
+
+**Severity**: Medium  
+**Affected Tasks**: 
+- Database existence verification (PostgreSQL)
+- Table existence verification (PostgreSQL)  
+- INSERT operations (PostgreSQL)
+
+**Scenarios Where This Occurs**:
+- User configures custom virtual environment path that doesn't exist in the execution environment
+- Documentation example paths (e.g., `/home/ubuntu/ansible_python_venv/bin/python`) are copied without modification
+- AWX execution environments with different Python installation paths
+
+### Solution
+
+Added explicit error handling for `rc == 127` with a comprehensive error message that:
+1. Identifies the invalid interpreter path
+2. Shows the current configured value
+3. Provides common solutions
+4. Fails fast before attempting database operations
+
+### Changes Made
+
+**File**: `tasks/database_postgresql.yml`
+
+**Before**:
+```yaml
+- name: Debug - Show database check result
+  ansible.builtin.debug:
+    msg:
+      - "Database check return code: {{ _db_exists_check.rc }}"
+      - "Database check stdout: {{ _db_exists_check.stdout_lines }}"
+      - "Database check stderr: {{ _db_exists_check.stderr_lines | default([]) }}"
+  when: _db_exists_check.rc != 0
+
+- name: Fail if psycopg2 is not available
+  ansible.builtin.fail:
+    msg: 
+      - "psycopg2 module is not installed on localhost."
+      - "Install it with: pip install psycopg2-binary"
+      - "Output: {{ _db_exists_check.stdout }}"
+  when: _db_exists_check.rc == 2
+  run_once: true
+
+- name: Fail if database does not exist
+  ansible.builtin.fail:
+    msg: "Database '{{ execution_result_db_name }}' does not exist..."
+  when: _db_exists_check.rc == 1
+  run_once: true
+```
+
+**After** (Added new task between Debug and psycopg2 check):
+```yaml
+- name: Debug - Show database check result
+  ansible.builtin.debug:
+    msg:
+      - "Database check return code: {{ _db_exists_check.rc }}"
+      - "Database check stdout: {{ _db_exists_check.stdout_lines }}"
+      - "Database check stderr: {{ _db_exists_check.stderr_lines | default([]) }}"
+  when: _db_exists_check.rc != 0
+
+- name: Fail if Python interpreter is not found
+  ansible.builtin.fail:
+    msg: 
+      - "ERROR: Python interpreter '{{ execution_result_python_interpreter }}' not found."
+      - "The configured interpreter path does not exist or is not executable."
+      - "Please verify the 'execution_result_python_interpreter' variable is set correctly."
+      - "Current value: {{ execution_result_python_interpreter }}"
+      - "Stderr: {{ _db_exists_check.stderr }}"
+      - ""
+      - "Common solutions:"
+      - "  - Use system Python: execution_result_python_interpreter: 'python3'"
+      - "  - Verify virtual environment path exists: ls -la {{ execution_result_python_interpreter }}"
+      - "  - Check execution environment has the correct Python installation"
+  when: _db_exists_check.rc == 127
+  run_once: true
+
+- name: Fail if psycopg2 is not available
+  ansible.builtin.fail:
+    msg: 
+      - "psycopg2 module is not installed on localhost."
+      - "Install it with: pip install psycopg2-binary"
+      - "Output: {{ _db_exists_check.stdout }}"
+  when: _db_exists_check.rc == 2
+  run_once: true
+
+- name: Fail if database does not exist
+  ansible.builtin.fail:
+    msg: "Database '{{ execution_result_db_name }}' does not exist..."
+  when: _db_exists_check.rc == 1
+  run_once: true
+```
+
+### Benefits
+
+✅ **Fail Fast**: Detects invalid interpreter configuration immediately before attempting database operations  
+✅ **Clear Error Messages**: Users see exactly what's wrong and how to fix it  
+✅ **Helpful Guidance**: Provides common solutions and configuration examples  
+✅ **Better Debugging**: Shows the configured value and stderr output for troubleshooting  
+✅ **Prevents Cascading Failures**: Stops execution before subsequent tasks fail with cryptic errors  
+
+### Error Handling Flow
+
+The role now validates the Python interpreter with proper error handling in this order:
+
+1. **rc == 127** → Python interpreter not found ❌ **FAIL with helpful message**
+2. **rc == 2** → psycopg2 module missing ❌ **FAIL with installation instructions**
+3. **rc == 1** → Database doesn't exist ❌ **FAIL with database creation guidance**
+4. **rc == 0** → Success ✅ **Continue to table verification**
+
+### Testing Results
+
+#### Before Fix:
+```
+TASK [update-db : Debug - Show database check result]
+ok: [Ubuntu -> localhost] => {
+    "msg": [
+        "Database check return code: 127",
+        "Database check stderr: ['/bin/sh: line 1: /home/ubuntu/ansible_python_venv/bin/python: No such file or directory']"
+    ]
+}
+# Continues to next tasks... eventually fails with cryptic errors
+```
+
+#### After Fix:
+```
+TASK [update-db : Fail if Python interpreter is not found]
+fatal: [Ubuntu -> localhost]: FAILED! =>
+  msg:
+    - "ERROR: Python interpreter '/home/ubuntu/ansible_python_venv/bin/python' not found."
+    - "The configured interpreter path does not exist or is not executable."
+    - "Please verify the 'execution_result_python_interpreter' variable is set correctly."
+    - "Current value: /home/ubuntu/ansible_python_venv/bin/python"
+    - "Stderr: /bin/sh: line 1: /home/ubuntu/ansible_python_venv/bin/python: No such file or directory"
+    - ""
+    - "Common solutions:"
+    - "  - Use system Python: execution_result_python_interpreter: 'python3'"
+    - "  - Verify virtual environment path exists: ls -la /home/ubuntu/ansible_python_venv/bin/python"
+    - "  - Check execution environment has the correct Python installation"
+# Playbook stops here - clear indication of the problem
+```
+
+### Related Configuration
+
+**Default Value** ([defaults/main.yml](defaults/main.yml)):
+```yaml
+execution_result_python_interpreter: "python3"
+```
+
+**Common Configurations**:
+- System Python (default): `"python3"`
+- Virtual environment: `"/path/to/venv/bin/python"` (must exist!)
+- Specific version: `"python3.11"`
+- AWX EE: `"python3"` (uses container Python)
+
+### Files Modified
+
+- `tasks/database_postgresql.yml` - Added Python interpreter validation task
+
+### Prevention
+
+To avoid this error:
+
+1. **Use system Python** (default - works in most environments):
+   ```yaml
+   execution_result_python_interpreter: "python3"
+   ```
+
+2. **Verify custom paths exist** before configuration:
+   ```bash
+   # Check if interpreter exists
+   ls -la /path/to/venv/bin/python
+   which python3
+   ```
+
+3. **In AWX/Tower**: Ensure execution environment has Python installed at the specified path
+
+4. **Don't copy example paths blindly** - verify they match your environment

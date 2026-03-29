@@ -68,6 +68,22 @@
           - "Database check stderr: {{ _db_exists_check.stderr_lines | default([]) }}"
       when: _db_exists_check.rc != 0
 
+    - name: Fail if Python interpreter is not found
+      ansible.builtin.fail:
+        msg: 
+          - "ERROR: Python interpreter '{{ execution_result_python_interpreter }}' not found."
+          - "The configured interpreter path does not exist or is not executable."
+          - "Please verify the 'execution_result_python_interpreter' variable is set correctly."
+          - "Current value: {{ execution_result_python_interpreter }}"
+          - "Stderr: {{ _db_exists_check.stderr }}"
+          - ""
+          - "Common solutions:"
+          - "  - Use system Python: execution_result_python_interpreter: 'python3'"
+          - "  - Verify virtual environment path exists: ls -la {{ execution_result_python_interpreter }}"
+          - "  - Check execution environment has the correct Python installation"
+      when: _db_exists_check.rc == 127
+      run_once: true
+
     - name: Fail if psycopg2 is not available
       ansible.builtin.fail:
         msg: 
