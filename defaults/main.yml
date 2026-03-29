@@ -13,7 +13,7 @@
 #   - Virtual environment: "/home/ubuntu/ansible_python_venv/bin/python"
 #   - Specific version: "/usr/bin/python3.9"
 #   - AWX EE: "python3" (uses container Python)
-execution_result_python_interpreter: "/home/ubuntu/ansible_python_venv/bin/python"
+execution_result_python_interpreter: "python3"
 
 # Database configuration
 execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
