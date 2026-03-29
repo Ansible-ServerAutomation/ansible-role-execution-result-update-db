@@ -3,23 +3,13 @@
 
 # Database configuration
 execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
-execution_result_db_host: "localhost"
+execution_result_db_host: "10.0.0.14"
 execution_result_db_port: 5432
 execution_result_db_name: "ansible_execution_results"
-execution_result_db_user: "ansible"
-execution_result_db_password: ""
+execution_result_db_user: '{{ lookup("env", "ANSIBLE_NET_USERNAME") }}'
+execution_result_db_password: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") }}'
 execution_result_db_table_success: "success_jobs"
 execution_result_db_table_failed: "failed_jobs"
-
-# AWX/Tower Credential Integration
-# When running in AWX/Tower, database credentials can be injected via custom credentials
-# The injector configuration should map credential fields to these variables:
-#   execution_result_db_host: '{{ db_host }}'
-#   execution_result_db_port: '{{ db_port }}'
-#   execution_result_db_name: '{{ db_name }}'
-#   execution_result_db_user: '{{ db_username }}'
-#   execution_result_db_password: '{{ db_password }}'
-# These will override the default values above when provided by AWX/Tower credentials
 
 # SQLite specific
 execution_result_db_sqlite_path: "/var/lib/ansible/execution_results.db"
