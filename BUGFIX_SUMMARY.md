@@ -5,7 +5,7 @@
 1. `couldn't resolve module/action 'community.postgresql.postgresql_ping'`
 2. `'ansible.builtin.set_fact' is not a valid attribute for a Block`
 
-## Problem Description
+## Problem 1: Collection Module Resolution Error
 
 When the role was executed in AWX/Tower environments where Ansible collections were not pre-installed, the following error occurred:
 
@@ -25,6 +25,33 @@ The role attempted to:
 However, **Ansible collections installed during playbook execution are not immediately available** in the current execution context. The collection modules couldn't be resolved because Ansible parses all task files at the beginning of the play, before the collection was installed.
 
 This created a **parse-time error** that couldn't be caught by rescue blocks (which only catch runtime errors).
+
+## Problem 2: YAML Syntax Error in database_postgresql.yml
+
+After fixing the first issue, a second error appeared in job 123:
+
+```
+ERROR! 'ansible.builtin.set_fact' is not a valid attribute for a Block
+
+The error appears to be in '/runner/requirements_roles/update-db/tasks/database_postgresql.yml': line 4, column 3
+```
+
+### Root Cause
+
+The `database_postgresql.yml` file had malformed YAML at the end of the main block:
+
+```yaml
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ ... }}"
+  delegate_to: localhost
+  ansible.builtin.set_fact:    # ← INVALID: Can't have module name as block attribute
+    _execution_result_records_processed: "{{ ... }}"
+```
+
+Lines 205-206 contained a duplicate `ansible.builtin.set_fact:` at the block level, which is not a valid YAML structure. Block-level attributes can include `when`, `delegate_to`, `rescue`, etc., but not module names like `ansible.builtin.set_fact`.
+
+This was likely a copy-paste error that duplicated the set_fact task content at the block level.
 
 ## Changes Made
 
