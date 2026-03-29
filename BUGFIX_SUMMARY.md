@@ -1,7 +1,9 @@
-# Bug Fix Summary - Collection Module Resolution Error
+# Bug Fix Summary - Collection Module Resolution & YAML Syntax Errors
 
 **Date**: March 30, 2026  
-**Issue**: `couldn't resolve module/action 'community.postgresql.postgresql_ping'`
+**Issues Fixed**:
+1. `couldn't resolve module/action 'community.postgresql.postgresql_ping'`
+2. `'ansible.builtin.set_fact' is not a valid attribute for a Block`
 
 ## Problem Description
 

@@ -202,8 +202,6 @@
       ansible.builtin.set_fact:
         _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
   delegate_to: localhost
-  ansible.builtin.set_fact:
-    _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
 
 - name: Debug - Show insert results
   ansible.builtin.debug:
