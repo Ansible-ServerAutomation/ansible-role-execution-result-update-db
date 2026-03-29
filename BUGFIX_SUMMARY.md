@@ -114,7 +114,36 @@ Added informative notices and comprehensive error handling:
           - "Solution: Pre-install the collection in your execution environment or run the playbook again."
 ```
 
-### 3. Updated Documentation ([README.md](README.md))
+### 3. Fixed YAML Syntax Error ([tasks/database_postgresql.yml](tasks/database_postgresql.yml))
+
+**Before** (lines 200-207):
+```yaml
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+  delegate_to: localhost
+  ansible.builtin.set_fact:    # ← INVALID at block level
+    _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+
+- name: Debug - Show insert results
+```
+
+**After** (lines 200-206):
+```yaml
+    - name: Set records processed count
+      ansible.builtin.set_fact:
+        _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+  delegate_to: localhost
+
+- name: Debug - Show insert results
+```
+
+**Benefits**:
+- Correct YAML syntax structure
+- Block properly closes with only valid block-level attributes
+- No duplicate task definitions
+
+### 4. Updated Documentation ([README.md](README.md))
 
 Enhanced the "Missing Ansible Collections Error" troubleshooting section with:
 - Explanation of the issue and when it occurs
