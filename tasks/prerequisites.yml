@@ -6,7 +6,7 @@
     - name: Check if required Python packages are installed (PostgreSQL)
       block:
         - name: Verify psycopg2 is available
-          ansible.builtin.command: python3 -c "import psycopg2"
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import psycopg2'"
           register: _check_psycopg2
           changed_when: false
           failed_when: false
@@ -20,7 +20,7 @@
     - name: Check if required Python packages are installed (MySQL)
       block:
         - name: Verify PyMySQL is available
-          ansible.builtin.command: python3 -c "import pymysql"
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import pymysql'"
           register: _check_pymysql
           changed_when: false
           failed_when: false
@@ -34,7 +34,7 @@
     - name: Check if required Python packages are installed (MongoDB)
       block:
         - name: Verify pymongo is available
-          ansible.builtin.command: python3 -c "import pymongo"
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import pymongo'"
           register: _check_pymongo
           changed_when: false
           failed_when: false
@@ -50,7 +50,7 @@
         - name: Test PostgreSQL connection using Python
           ansible.builtin.command:
             cmd: >
-              python3 -c "import psycopg2; conn = psycopg2.connect(
+              {{ execution_result_python_interpreter }} -c "import psycopg2; conn = psycopg2.connect(
               host='{{ execution_result_db_host }}',
               port={{ execution_result_db_port }},
               user='{{ execution_result_db_user }}',
@@ -80,7 +80,7 @@
         - name: Test MySQL connection using Python
           ansible.builtin.command:
             cmd: >
-              python3 -c "import pymysql; conn = pymysql.connect(
+              {{ execution_result_python_interpreter }} -c "import pymysql; conn = pymysql.connect(
               host='{{ execution_result_db_host }}',
               port={{ execution_result_db_port }},
               user='{{ execution_result_db_user }}',

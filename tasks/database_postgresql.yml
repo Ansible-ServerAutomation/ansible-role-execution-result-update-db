@@ -21,7 +21,7 @@
 
     - name: Verify database exists using Python
       ansible.builtin.shell: |
-        python3 << 'EOF'
+        {{ execution_result_python_interpreter }} << 'EOF'
         import sys
         try:
             import psycopg2
@@ -85,7 +85,7 @@
 
     - name: Verify success_jobs table exists using Python
       ansible.builtin.shell: |
-        python3 << 'EOF'
+        {{ execution_result_python_interpreter }} << 'EOF'
         import sys
         try:
             import psycopg2
@@ -131,7 +131,7 @@
 
     - name: Verify failed_jobs table exists using Python
       ansible.builtin.shell: |
-        python3 << 'EOF'
+        {{ execution_result_python_interpreter }} << 'EOF'
         import sys
         try:
             import psycopg2
@@ -180,7 +180,7 @@
         - name: Insert success records via psycopg2
           ansible.builtin.shell:
             cmd: |
-              python3 << 'EOFPYTHON'
+              {{ execution_result_python_interpreter }} << 'EOFPYTHON'
               import psycopg2
               import json
               import sys
@@ -238,7 +238,7 @@
         - name: Insert failed records via psycopg2
           ansible.builtin.shell:
             cmd: |
-              python3 << 'EOFPYTHON'
+              {{ execution_result_python_interpreter }} << 'EOFPYTHON'
               import psycopg2
               import json
               import sys

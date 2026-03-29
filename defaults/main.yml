@@ -6,6 +6,15 @@
 # It will NOT create databases or tables automatically.
 # See README.md "Database Setup" section for DDL scripts.
 
+# Python interpreter configuration
+# Set this to the Python interpreter that has database packages (psycopg2, PyMySQL, pymongo) installed
+# Examples:
+#   - System Python: "python3" (default)
+#   - Virtual environment: "/home/ubuntu/ansible_python_venv/bin/python"
+#   - Specific version: "/usr/bin/python3.9"
+#   - AWX EE: "python3" (uses container Python)
+execution_result_python_interpreter: "python3"
+
 # Database configuration
 execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
 execution_result_db_host: "10.0.0.14"

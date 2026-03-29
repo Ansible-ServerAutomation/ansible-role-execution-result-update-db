@@ -186,6 +186,7 @@ All variables have sensible defaults. In most cases, you only need to specify th
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `execution_result_python_interpreter` | no | `python3` | Python interpreter to use for database operations (e.g., `/path/to/venv/bin/python`) |
 | `execution_result_fail_on_db_error` | no | `false` | Fail the play if database operations fail |
 | `execution_result_validate_data` | no | `true` | Validate data before inserting |
 | `execution_result_truncate_long_fields` | no | `true` | Truncate fields exceeding max length |
@@ -207,6 +208,47 @@ All variables have sensible defaults. In most cases, you only need to specify th
 |----------|----------|---------|-------------|
 | `execution_result_debug_mode` | no | `false` | Enable debug output |
 | `execution_result_log_queries` | no | `false` | Log SQL queries (if supported) |
+
+## Python Interpreter Configuration
+
+The role uses Python to execute database operations. By default, it uses `python3`, but you can configure a specific Python interpreter using the `execution_result_python_interpreter` variable.
+
+### Using a Virtual Environment
+
+If you have installed database drivers (psycopg2, PyMySQL, pymongo) in a virtual environment on the Ansible control node or AWX localhost, configure the role to use that interpreter:
+
+```yaml
+- hosts: localhost
+  vars:
+    execution_result_python_interpreter: "/home/ubuntu/ansible_python_venv/bin/python"
+    execution_result_db_type: postgresql
+    execution_result_db_host: 10.0.0.14
+    execution_result_db_password: "{{ vault_db_password }}"
+  roles:
+    - ansible-role-execution-result-update-db
+```
+
+### Using a Specific Python Version
+
+You can also specify a specific Python version:
+
+```yaml
+execution_result_python_interpreter: "python3.11"
+```
+
+### Common Scenarios
+
+| Scenario | Configuration Example |
+|----------|----------------------|
+| System Python 3 (default) | `execution_result_python_interpreter: "python3"` |
+| Virtual environment | `execution_result_python_interpreter: "/path/to/venv/bin/python"` |
+| Specific Python version | `execution_result_python_interpreter: "python3.11"` |
+| Custom installation | `execution_result_python_interpreter: "/usr/local/bin/python3"` |
+
+**Note**: The specified Python interpreter must have the required database driver installed:
+- PostgreSQL: `psycopg2-binary>=2.5.1`
+- MySQL: `PyMySQL>=1.0.0`
+- MongoDB: `pymongo>=4.0.0`
 
 ## AWX Execution Environment Setup
 
