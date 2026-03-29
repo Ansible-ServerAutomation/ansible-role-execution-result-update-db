@@ -84,18 +84,31 @@ Depending on the database type, the following Python packages are required on th
 
 ### Ansible Collections
 
-The following Ansible collections are required and will be **automatically installed on localhost** if not already present:
+**IMPORTANT UPDATE**: As of the latest version, **PostgreSQL operations NO LONGER require** the `community.postgresql` Ansible collection. All PostgreSQL database operations use Python/psycopg2 directly.
 
+The following Ansible collections are required for **non-PostgreSQL** database types and will be **automatically installed on localhost** if not already present:
+
+| Database | Required Collection | Status |
+|----------|-------------------|---------|
+| PostgreSQL | ~~community.postgresql~~ | ✅ **NOT REQUIRED** - Uses Python directly |
+| MySQL | community.mysql | ❗ Required for MySQL operations |
+| MongoDB | community.mongodb | ❗ Required for MongoDB operations |
+| SQLite | community.general | Required (minimal usage) |
+
+**Installation (for MySQL/MongoDB only)**:
 ```bash
-ansible-galaxy collection install community.postgresql
 ansible-galaxy collection install community.mysql
 ansible-galaxy collection install community.general
 ansible-galaxy collection install community.mongodb
 ```
 
-**For AWX/Tower Users**: While the role attempts to install collections automatically, it's recommended to pre-install them in your execution environment for better performance. See [AWX Execution Environment Setup](#awx-execution-environment-setup) below.
+**For PostgreSQL users**: No Ansible collection installation needed! The role uses Python/psycopg2 directly for all database operations (connectivity checks, table verification, and INSERT operations).
 
-**For standalone Ansible**: The role will automatically check and install the required collection based on your database type. No manual installation needed unless you want to pre-install them.
+**For AWX/Tower Users**: 
+- **PostgreSQL**: Only install `psycopg2-binary` in your execution environment. No collection needed.
+- **MySQL/MongoDB**: Pre-install collections in your execution environment for better performance. See [AWX Execution Environment Setup](#awx-execution-environment-setup) below.
+
+**For standalone Ansible**: The role will automatically check and install the required collection based on your database type (except PostgreSQL which needs no collection).
 
 ## Database Setup
 
@@ -197,7 +210,9 @@ All variables have sensible defaults. In most cases, you only need to specify th
 
 ## AWX Execution Environment Setup
 
-When using this role in AWX/Ansible Tower, the required Ansible collections must be included in your execution environment container image.
+**IMPORTANT UPDATE**: PostgreSQL operations no longer require the `community.postgresql` collection. You only need to install the `psycopg2-binary` Python package.
+
+When using this role in AWX/Ansible Tower for **MySQL or MongoDB**, the required Ansible collections must be included in your execution environment container image.
 
 ### Option 1: Using ansible-builder (Recommended)
 
@@ -212,7 +227,7 @@ images:
     name: quay.io/ansible/awx-ee:latest
 
 dependencies:
-  galaxy: requirements.yml
+  galaxy: requirements.yml  # Only needed for MySQL/MongoDB
   python: requirements.txt
   system: bindep.txt
 
@@ -221,13 +236,12 @@ additional_build_steps:
     - RUN ansible-galaxy collection install -r requirements.yml
 ```
 
-Create `requirements.yml`:
+Create `requirements.yml` (for MySQL/MongoDB only):
 
 ```yaml
 ---
 collections:
-  - name: community.postgresql
-    version: ">=2.0.0"
+  # community.postgresql NOT NEEDED - role uses Python directly
   - name: community.mysql
     version: ">=3.0.0"
   - name: community.general
@@ -239,9 +253,9 @@ collections:
 Create `requirements.txt`:
 
 ```
-psycopg2-binary>=2.9.0
-PyMySQL>=1.0.0
-pymongo>=4.0.0
+psycopg2-binary>=2.9.0  # For PostgreSQL (no collection needed!)
+PyMySQL>=1.0.0          # For MySQL
+pymongo>=4.0.0          # For MongoDB
 ```
 
 Build the execution environment:
@@ -261,15 +275,16 @@ RUN pip3 install --no-cache-dir \
     PyMySQL>=1.0.0 \
     pymongo>=4.0.0
 
-# Install Ansible collections
+# Install Ansible collections (community.postgresql NOT needed!)
 RUN ansible-galaxy collection install \
-    community.postgresql \
     community.mysql \
     community.general \
     community.mongodb
 
 USER 1000
 ```
+
+**Note**: For PostgreSQL-only deployments, you can skip the `ansible-galaxy collection install` step entirely.
 
 Build and push:
 
@@ -285,13 +300,13 @@ Create `collections/requirements.yml` in your Ansible project:
 ```yaml
 ---
 collections:
-  - community.postgresql
+  # community.postgresql NOT NEEDED - role uses Python directly
   - community.mysql
   - community.general
   - community.mongodb
 ```
 
-**Note**: This approach downloads collections at job runtime, increasing execution time and potential for failures.
+**Note**: This approach downloads collections at job runtime, increasing execution time and potential for failures. Not needed at all for PostgreSQL-only deployments.
 
 ### Verifying Collection Installation
 

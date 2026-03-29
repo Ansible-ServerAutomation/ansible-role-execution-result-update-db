@@ -19,181 +19,241 @@
           - "Tables: {{ execution_result_db_table_success }}, {{ execution_result_db_table_failed }}"
       when: execution_result_debug_mode | bool
 
-    - name: Verify database exists
-      community.postgresql.postgresql_query:
-        login_host: "{{ execution_result_db_host }}"
-        login_port: "{{ execution_result_db_port }}"
-        login_user: "{{ execution_result_db_user }}"
-        login_password: "{{ execution_result_db_password }}"
-        db: postgres
-        query: "SELECT 1 FROM pg_database WHERE datname = %s"
-        positional_args:
-          - "{{ execution_result_db_name }}"
+    - name: Verify database exists using Python
+      ansible.builtin.shell: |
+        python3 << 'EOF'
+        import psycopg2
+        import sys
+        try:
+            conn = psycopg2.connect(
+                host='{{ execution_result_db_host }}',
+                port={{ execution_result_db_port }},
+                user='{{ execution_result_db_user }}',
+                password='{{ execution_result_db_password }}',
+                database='postgres',
+                connect_timeout=10
+            )
+            cur = conn.cursor()
+            cur.execute('SELECT 1 FROM pg_database WHERE datname = %s', ('{{ execution_result_db_name }}',))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+            if result:
+                print('EXISTS')
+                sys.exit(0)
+            else:
+                print('NOT_FOUND')
+                sys.exit(1)
+        except Exception as e:
+            print(f'ERROR: {e}')
+            sys.exit(2)
+        EOF
       register: _db_exists_check
+      changed_when: false
+      failed_when: _db_exists_check.rc == 2
+      no_log: true
       run_once: true
 
     - name: Fail if database does not exist
       ansible.builtin.fail:
         msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
-      when: _db_exists_check.rowcount == 0
+      when: _db_exists_check.rc != 0
       run_once: true
 
-    - name: Verify success_jobs table exists
-      community.postgresql.postgresql_query:
-        login_host: "{{ execution_result_db_host }}"
-        login_port: "{{ execution_result_db_port }}"
-        login_user: "{{ execution_result_db_user }}"
-        login_password: "{{ execution_result_db_password }}"
-        db: "{{ execution_result_db_name }}"
-        query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
-        positional_args:
-          - "{{ execution_result_db_table_success }}"
+    - name: Verify success_jobs table exists using Python
+      ansible.builtin.shell: |
+        python3 << 'EOF'
+        import psycopg2
+        import sys
+        try:
+            conn = psycopg2.connect(
+                host='{{ execution_result_db_host }}',
+                port={{ execution_result_db_port }},
+                user='{{ execution_result_db_user }}',
+                password='{{ execution_result_db_password }}',
+                database='{{ execution_result_db_name }}',
+                connect_timeout=10
+            )
+            cur = conn.cursor()
+            cur.execute('SELECT 1 FROM information_schema.tables WHERE table_name = %s', ('{{ execution_result_db_table_success }}',))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+            if result:
+                print('EXISTS')
+                sys.exit(0)
+            else:
+                print('NOT_FOUND')
+                sys.exit(1)
+        except Exception as e:
+            print(f'ERROR: {e}')
+            sys.exit(2)
+        EOF
       register: _success_table_exists
+      changed_when: false
+      failed_when: _success_table_exists.rc == 2
+      no_log: true
       run_once: true
 
     - name: Fail if success_jobs table does not exist
       ansible.builtin.fail:
         msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
-      when: _success_table_exists.rowcount == 0
+      when: _success_table_exists.rc != 0
       run_once: true
 
-    - name: Verify failed_jobs table exists
-      community.postgresql.postgresql_query:
-        login_host: "{{ execution_result_db_host }}"
-        login_port: "{{ execution_result_db_port }}"
-        login_user: "{{ execution_result_db_user }}"
-        login_password: "{{ execution_result_db_password }}"
-        db: "{{ execution_result_db_name }}"
-        query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
-        positional_args:
-          - "{{ execution_result_db_table_failed }}"
+    - name: Verify failed_jobs table exists using Python
+      ansible.builtin.shell: |
+        python3 << 'EOF'
+        import psycopg2
+        import sys
+        try:
+            conn = psycopg2.connect(
+                host='{{ execution_result_db_host }}',
+                port={{ execution_result_db_port }},
+                user='{{ execution_result_db_user }}',
+                password='{{ execution_result_db_password }}',
+                database='{{ execution_result_db_name }}',
+                connect_timeout=10
+            )
+            cur = conn.cursor()
+            cur.execute('SELECT 1 FROM information_schema.tables WHERE table_name = %s', ('{{ execution_result_db_table_failed }}',))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+            if result:
+                print('EXISTS')
+                sys.exit(0)
+            else:
+                print('NOT_FOUND')
+                sys.exit(1)
+        except Exception as e:
+            print(f'ERROR: {e}')
+            sys.exit(2)
+        EOF
       register: _failed_table_exists
+      changed_when: false
+      failed_when: _failed_table_exists.rc == 2
+      no_log: true
       run_once: true
 
     - name: Fail if failed_jobs table does not exist
       ansible.builtin.fail:
         msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
-      when: _failed_table_exists.rowcount == 0
+      when: _failed_table_exists.rc != 0
       run_once: true
 
-    - name: Insert successful execution results into PostgreSQL
+    - name: Insert successful execution results into PostgreSQL using Python
       block:
-        - name: Insert success records
-          community.postgresql.postgresql_query:
-            login_host: "{{ execution_result_db_host }}"
-            login_port: "{{ execution_result_db_port }}"
-            login_user: "{{ execution_result_db_user }}"
-            login_password: "{{ execution_result_db_password }}"
-            db: "{{ execution_result_db_name }}"
-            query: |
-              INSERT INTO {{ execution_result_db_table_success }} (
-                timestamp, hostname, inventory_hostname, ansible_host,
-                project, organization, job_template, playbook,
-                scm_url, scm_branch, scm_revision, execution_environment,
-                status, return_code, message, stdout, stderr, exception,
-                warnings, failed_task, failed_task_module,
-                os_distribution, os_version, os_family, os_system, os_architecture
-              ) VALUES (
-                %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
-                %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
-                %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
-                %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
-                %(warnings)s, %(failed_task)s, %(failed_task_module)s,
-                %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
-              )
-            named_args:
-              timestamp: "{{ item.timestamp }}"
-              hostname: "{{ item.hostname }}"
-              inventory_hostname: "{{ item.inventory_hostname }}"
-              ansible_host: "{{ item.ansible_host }}"
-              project: "{{ item.project }}"
-              organization: "{{ item.organization }}"
-              job_template: "{{ item.job_template }}"
-              playbook: "{{ item.playbook }}"
-              scm_url: "{{ item.scm_url }}"
-              scm_branch: "{{ item.scm_branch }}"
-              scm_revision: "{{ item.scm_revision }}"
-              execution_environment: "{{ item.execution_environment }}"
-              status: "{{ item.status }}"
-              return_code: "{{ item.return_code }}"
-              message: "{{ item.message }}"
-              stdout: "{{ item.stdout }}"
-              stderr: "{{ item.stderr }}"
-              exception: "{{ item.exception }}"
-              warnings: "{{ item.warnings | to_json }}"
-              failed_task: "{{ item.failed_task }}"
-              failed_task_module: "{{ item.failed_task_module }}"
-              os_distribution: "{{ item.os_distribution }}"
-              os_version: "{{ item.os_version }}"
-              os_family: "{{ item.os_family }}"
-              os_system: "{{ item.os_system }}"
-              os_architecture: "{{ item.os_architecture }}"
+        - name: Insert success records via psycopg2
+          ansible.builtin.shell:
+            cmd: |
+              python3 << 'EOFPYTHON'
+              import psycopg2
+              import json
+              import sys
+              
+              record = json.loads('''{{ item | to_json }}''')
+              
+              try:
+                  conn = psycopg2.connect(
+                      host="{{ execution_result_db_host }}",
+                      port={{ execution_result_db_port }},
+                      user="{{ execution_result_db_user }}",
+                      password="{{ execution_result_db_password }}",
+                      database="{{ execution_result_db_name }}",
+                      connect_timeout=10
+                  )
+                  cur = conn.cursor()
+                  cur.execute("""
+                      INSERT INTO {{ execution_result_db_table_success }} (
+                          timestamp, hostname, inventory_hostname, ansible_host,
+                          project, organization, job_template, playbook,
+                          scm_url, scm_branch, scm_revision, execution_environment,
+                          status, return_code, message, stdout, stderr, exception,
+                          warnings, failed_task, failed_task_module,
+                          os_distribution, os_version, os_family, os_system, os_architecture
+                      ) VALUES (
+                          %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
+                          %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
+                          %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
+                          %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
+                          %(warnings)s, %(failed_task)s, %(failed_task_module)s,
+                          %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
+                      )
+                  """, record)
+                  conn.commit()
+                  cur.close()
+                  conn.close()
+                  print("SUCCESS")
+              except Exception as e:
+                  print(f"ERROR: {e}")
+                  sys.exit(1)
+              EOFPYTHON
           loop: "{{ _execution_results_success }}"
           loop_control:
             label: "{{ item.timestamp }} - {{ item.status }}"
           register: _insert_success_result
+          changed_when: true
           ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+          no_log: true
       when:
         - execution_result_batch_insert | bool
         - _execution_results_success | length > 0
 
-    - name: Insert failed execution results into PostgreSQL
+    - name: Insert failed execution results into PostgreSQL using Python
       block:
-        - name: Insert failed records
-          community.postgresql.postgresql_query:
-            login_host: "{{ execution_result_db_host }}"
-            login_port: "{{ execution_result_db_port }}"
-            login_user: "{{ execution_result_db_user }}"
-            login_password: "{{ execution_result_db_password }}"
-            db: "{{ execution_result_db_name }}"
-            query: |
-              INSERT INTO {{ execution_result_db_table_failed }} (
-                timestamp, hostname, inventory_hostname, ansible_host,
-                project, organization, job_template, playbook,
-                scm_url, scm_branch, scm_revision, execution_environment,
-                status, return_code, message, stdout, stderr, exception,
-                warnings, failed_task, failed_task_module,
-                os_distribution, os_version, os_family, os_system, os_architecture
-              ) VALUES (
-                %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
-                %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
-                %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
-                %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
-                %(warnings)s, %(failed_task)s, %(failed_task_module)s,
-                %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
-              )
-            named_args:
-              timestamp: "{{ item.timestamp }}"
-              hostname: "{{ item.hostname }}"
-              inventory_hostname: "{{ item.inventory_hostname }}"
-              ansible_host: "{{ item.ansible_host }}"
-              project: "{{ item.project }}"
-              organization: "{{ item.organization }}"
-              job_template: "{{ item.job_template }}"
-              playbook: "{{ item.playbook }}"
-              scm_url: "{{ item.scm_url }}"
-              scm_branch: "{{ item.scm_branch }}"
-              scm_revision: "{{ item.scm_revision }}"
-              execution_environment: "{{ item.execution_environment }}"
-              status: "{{ item.status }}"
-              return_code: "{{ item.return_code }}"
-              message: "{{ item.message }}"
-              stdout: "{{ item.stdout }}"
-              stderr: "{{ item.stderr }}"
-              exception: "{{ item.exception }}"
-              warnings: "{{ item.warnings | to_json }}"
-              failed_task: "{{ item.failed_task }}"
-              failed_task_module: "{{ item.failed_task_module }}"
-              os_distribution: "{{ item.os_distribution }}"
-              os_version: "{{ item.os_version }}"
-              os_family: "{{ item.os_family }}"
-              os_system: "{{ item.os_system }}"
-              os_architecture: "{{ item.os_architecture }}"
+        - name: Insert failed records via psycopg2
+          ansible.builtin.shell:
+            cmd: |
+              python3 << 'EOFPYTHON'
+              import psycopg2
+              import json
+              import sys
+              
+              record = json.loads('''{{ item | to_json }}''')
+              
+              try:
+                  conn = psycopg2.connect(
+                      host="{{ execution_result_db_host }}",
+                      port={{ execution_result_db_port }},
+                      user="{{ execution_result_db_user }}",
+                      password="{{ execution_result_db_password }}",
+                      database="{{ execution_result_db_name }}",
+                      connect_timeout=10
+                  )
+                  cur = conn.cursor()
+                  cur.execute("""
+                      INSERT INTO {{ execution_result_db_table_failed }} (
+                          timestamp, hostname, inventory_hostname, ansible_host,
+                          project, organization, job_template, playbook,
+                          scm_url, scm_branch, scm_revision, execution_environment,
+                          status, return_code, message, stdout, stderr, exception,
+                          warnings, failed_task, failed_task_module,
+                          os_distribution, os_version, os_family, os_system, os_architecture
+                      ) VALUES (
+                          %(timestamp)s, %(hostname)s, %(inventory_hostname)s, %(ansible_host)s,
+                          %(project)s, %(organization)s, %(job_template)s, %(playbook)s,
+                          %(scm_url)s, %(scm_branch)s, %(scm_revision)s, %(execution_environment)s,
+                          %(status)s, %(return_code)s, %(message)s, %(stdout)s, %(stderr)s, %(exception)s,
+                          %(warnings)s, %(failed_task)s, %(failed_task_module)s,
+                          %(os_distribution)s, %(os_version)s, %(os_family)s, %(os_system)s, %(os_architecture)s
+                      )
+                  """, record)
+                  conn.commit()
+                  cur.close()
+                  conn.close()
+                  print("SUCCESS")
+              except Exception as e:
+                  print(f"ERROR: {e}")
+                  sys.exit(1)
+              EOFPYTHON
           loop: "{{ _execution_results_failed }}"
           loop_control:
             label: "{{ item.timestamp }} - {{ item.status }}"
           register: _insert_failed_result
+          changed_when: true
           ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+          no_log: true
       when:
         - execution_result_batch_insert | bool
         - _execution_results_failed | length > 0
