@@ -1,0 +1,239 @@
+---
+# vars/main.yml - Internal variables for execution-result-update-db role
+
+# Database port defaults by type
+_execution_result_db_ports:
+  postgresql: 5432
+  mysql: 3306
+  mongodb: 27017
+  sqlite: 0
+
+# Required Python packages by database type
+_execution_result_db_required_packages:
+  postgresql:
+    - psycopg2-binary
+  mysql:
+    - PyMySQL
+  mongodb:
+    - pymongo
+  sqlite: []
+
+# Database DDL templates for success_jobs table
+_execution_result_db_create_success_table_sql:
+  postgresql: |
+    CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_success }} (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP NOT NULL,
+      hostname VARCHAR(255),
+      inventory_hostname VARCHAR(255),
+      ansible_host VARCHAR(255),
+      project VARCHAR(500),
+      organization VARCHAR(500),
+      job_template VARCHAR(500),
+      playbook VARCHAR(500),
+      scm_url VARCHAR(1000),
+      scm_branch VARCHAR(255),
+      scm_revision VARCHAR(255),
+      execution_environment VARCHAR(500),
+      status VARCHAR(50) NOT NULL,
+      return_code INTEGER,
+      message TEXT,
+      stdout TEXT,
+      stderr TEXT,
+      exception TEXT,
+      warnings JSONB,
+      failed_task VARCHAR(500),
+      failed_task_module VARCHAR(255),
+      os_distribution VARCHAR(100),
+      os_version VARCHAR(100),
+      os_family VARCHAR(100),
+      os_system VARCHAR(100),
+      os_architecture VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_timestamp ON {{ execution_result_db_table_success }}(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_project ON {{ execution_result_db_table_success }}(project);
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_success }}_playbook ON {{ execution_result_db_table_success }}(playbook);
+  
+  mysql: |
+    CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_success }} (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      timestamp DATETIME NOT NULL,
+      hostname VARCHAR(255),
+      inventory_hostname VARCHAR(255),
+      ansible_host VARCHAR(255),
+      project VARCHAR(500),
+      organization VARCHAR(500),
+      job_template VARCHAR(500),
+      playbook VARCHAR(500),
+      scm_url VARCHAR(1000),
+      scm_branch VARCHAR(255),
+      scm_revision VARCHAR(255),
+      execution_environment VARCHAR(500),
+      status VARCHAR(50) NOT NULL,
+      return_code INT,
+      message TEXT,
+      stdout TEXT,
+      stderr TEXT,
+      exception TEXT,
+      warnings JSON,
+      failed_task VARCHAR(500),
+      failed_task_module VARCHAR(255),
+      os_distribution VARCHAR(100),
+      os_version VARCHAR(100),
+      os_family VARCHAR(100),
+      os_system VARCHAR(100),
+      os_architecture VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_timestamp (timestamp),
+      INDEX idx_project (project),
+      INDEX idx_playbook (playbook)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+# Database DDL templates for failed_jobs table
+_execution_result_db_create_failed_table_sql:
+  postgresql: |
+    CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_failed }} (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP NOT NULL,
+      hostname VARCHAR(255),
+      inventory_hostname VARCHAR(255),
+      ansible_host VARCHAR(255),
+      project VARCHAR(500),
+      organization VARCHAR(500),
+      job_template VARCHAR(500),
+      playbook VARCHAR(500),
+      scm_url VARCHAR(1000),
+      scm_branch VARCHAR(255),
+      scm_revision VARCHAR(255),
+      execution_environment VARCHAR(500),
+      status VARCHAR(50) NOT NULL,
+      return_code INTEGER,
+      message TEXT,
+      stdout TEXT,
+      stderr TEXT,
+      exception TEXT,
+      warnings JSONB,
+      failed_task VARCHAR(500),
+      failed_task_module VARCHAR(255),
+      os_distribution VARCHAR(100),
+      os_version VARCHAR(100),
+      os_family VARCHAR(100),
+      os_system VARCHAR(100),
+      os_architecture VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_timestamp ON {{ execution_result_db_table_failed }}(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_project ON {{ execution_result_db_table_failed }}(project);
+    CREATE INDEX IF NOT EXISTS idx_{{ execution_result_db_table_failed }}_failed_task ON {{ execution_result_db_table_failed }}(failed_task);
+  
+  mysql: |
+    CREATE TABLE IF NOT EXISTS {{ execution_result_db_table_failed }} (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      timestamp DATETIME NOT NULL,
+      hostname VARCHAR(255),
+      inventory_hostname VARCHAR(255),
+      ansible_host VARCHAR(255),
+      project VARCHAR(500),
+      organization VARCHAR(500),
+      job_template VARCHAR(500),
+      playbook VARCHAR(500),
+      scm_url VARCHAR(1000),
+      scm_branch VARCHAR(255),
+      scm_revision VARCHAR(255),
+      execution_environment VARCHAR(500),
+      status VARCHAR(50) NOT NULL,
+      return_code INT,
+      message TEXT,
+      stdout TEXT,
+      stderr TEXT,
+      exception TEXT,
+      warnings JSON,
+      failed_task VARCHAR(500),
+      failed_task_module VARCHAR(255),
+      os_distribution VARCHAR(100),
+      os_version VARCHAR(100),
+      os_family VARCHAR(100),
+      os_system VARCHAR(100),
+      os_architecture VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_timestamp (timestamp),
+      INDEX idx_project (project),
+      INDEX idx_failed_task (failed_task)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+# Field mappings from execution_results artifact
+_execution_result_field_mapping:
+  - artifact_field: timestamp
+    db_field: timestamp
+    required: true
+  - artifact_field: project
+    db_field: project
+    required: false
+  - artifact_field: organization
+    db_field: organization
+    required: false
+  - artifact_field: job_template
+    db_field: job_template
+    required: false
+  - artifact_field: playbook
+    db_field: playbook
+    required: false
+  - artifact_field: scm_url
+    db_field: scm_url
+    required: false
+  - artifact_field: scm_branch
+    db_field: scm_branch
+    required: false
+  - artifact_field: scm_revision
+    db_field: scm_revision
+    required: false
+  - artifact_field: execution_environment
+    db_field: execution_environment
+    required: false
+  - artifact_field: status
+    db_field: status
+    required: true
+  - artifact_field: return_code
+    db_field: return_code
+    required: false
+  - artifact_field: message
+    db_field: message
+    required: false
+  - artifact_field: stdout
+    db_field: stdout
+    required: false
+  - artifact_field: stderr
+    db_field: stderr
+    required: false
+  - artifact_field: exception
+    db_field: exception
+    required: false
+  - artifact_field: warnings
+    db_field: warnings
+    required: false
+  - artifact_field: failed_task
+    db_field: failed_task
+    required: false
+  - artifact_field: failed_task_module
+    db_field: failed_task_module
+    required: false
+  - artifact_field: os_distribution
+    db_field: os_distribution
+    required: false
+  - artifact_field: os_version
+    db_field: os_version
+    required: false
+  - artifact_field: os_family
+    db_field: os_family
+    required: false
+  - artifact_field: os_system
+    db_field: os_system
+    required: false
+  - artifact_field: os_architecture
+    db_field: os_architecture
+    required: false

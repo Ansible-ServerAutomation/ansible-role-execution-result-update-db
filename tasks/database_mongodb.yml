@@ -1,0 +1,104 @@
+---
+# tasks/database_mongodb.yml - MongoDB specific tasks
+
+- name: Skip MongoDB tasks if no prepared records
+  ansible.builtin.meta: end_host
+  when: _execution_results_prepared | length == 0
+
+- name: Debug - Show database connection details
+  ansible.builtin.debug:
+    msg:
+      - "Connecting to MongoDB database"
+      - "Host: {{ execution_result_db_host }}"
+      - "Port: {{ execution_result_db_port }}"
+      - "Database: {{ execution_result_db_name }}"
+      - "User: {{ execution_result_db_user }}"
+      - "Password: {{ 'Provided' if execution_result_db_password else 'Not provided' }}"
+      - "Collections: {{ execution_result_db_mongodb_collection_success }}, {{ execution_result_db_mongodb_collection_failed }}"
+      - "Auth Source: {{ execution_result_db_mongodb_auth_source }}"
+  when: execution_result_debug_mode | bool
+
+- name: Insert successful execution results into MongoDB
+  block:
+    - name: Insert success records into MongoDB collection
+      community.mongodb.mongodb_insert:
+        name: "{{ execution_result_db_name }}"
+        collection: "{{ execution_result_db_mongodb_collection_success }}"
+        connection_string: "mongodb://{{ execution_result_db_user }}:{{ execution_result_db_password }}@{{ execution_result_db_host }}:{{ execution_result_db_port }}/{{ execution_result_db_name }}?authSource={{ execution_result_db_mongodb_auth_source }}"
+        records: "{{ _execution_results_success }}"
+      delegate_to: localhost
+      run_once: true
+      register: _insert_success_result
+      ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+  when: _execution_results_success | length > 0
+
+- name: Insert failed execution results into MongoDB
+  block:
+    - name: Insert failed records into MongoDB collection
+      community.mongodb.mongodb_insert:
+        name: "{{ execution_result_db_name }}"
+        collection: "{{ execution_result_db_mongodb_collection_failed }}"
+        connection_string: "mongodb://{{ execution_result_db_user }}:{{ execution_result_db_password }}@{{ execution_result_db_host }}:{{ execution_result_db_port }}/{{ execution_result_db_name }}?authSource={{ execution_result_db_mongodb_auth_source }}"
+        records: "{{ _execution_results_failed }}"
+      delegate_to: localhost
+      run_once: true
+      register: _insert_failed_result
+      ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+  when: _execution_results_failed | length > 0
+
+- name: Set records processed count
+  ansible.builtin.set_fact:
+    _execution_result_records_processed: "{{ (_execution_results_success | length) + (_execution_results_failed | length) }}"
+
+- name: Create indexes on MongoDB success_jobs collection
+  community.mongodb.mongodb_index:
+    name: "{{ execution_result_db_name }}"
+    collection: "{{ execution_result_db_mongodb_collection_success }}"
+    connection_string: "mongodb://{{ execution_result_db_user }}:{{ execution_result_db_password }}@{{ execution_result_db_host }}:{{ execution_result_db_port }}/{{ execution_result_db_name }}?authSource={{ execution_result_db_mongodb_auth_source }}"
+    indexes:
+      - keys:
+          timestamp: 1
+        name: idx_timestamp
+      - keys:
+          project: 1
+        name: idx_project
+      - keys:
+          organization: 1
+        name: idx_organization
+      - keys:
+          playbook: 1
+        name: idx_playbook
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+  when: _execution_results_success | length > 0
+
+- name: Create indexes on MongoDB failed_jobs collection
+  community.mongodb.mongodb_index:
+    name: "{{ execution_result_db_name }}"
+    collection: "{{ execution_result_db_mongodb_collection_failed }}"
+    connection_string: "mongodb://{{ execution_result_db_user }}:{{ execution_result_db_password }}@{{ execution_result_db_host }}:{{ execution_result_db_port }}/{{ execution_result_db_name }}?authSource={{ execution_result_db_mongodb_auth_source }}"
+    indexes:
+      - keys:
+          timestamp: 1
+        name: idx_timestamp
+      - keys:
+          project: 1
+        name: idx_project
+      - keys:
+          organization: 1
+        name: idx_organization
+      - keys:
+          failed_task: 1
+        name: idx_failed_task
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: "{{ not execution_result_fail_on_db_error }}"
+  when: _execution_results_failed | length > 0
+
+- name: Debug - Show insert results
+  ansible.builtin.debug:
+    msg: "Successfully inserted {{ _execution_results_success | length }} success record(s) and {{ _execution_results_failed | length }} failed record(s) into MongoDB"
+  when:
+    - execution_result_debug_mode | bool
+    - _execution_result_records_processed | int > 0

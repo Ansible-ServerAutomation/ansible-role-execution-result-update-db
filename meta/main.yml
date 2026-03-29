@@ -1,0 +1,62 @@
+---
+# meta/main.yml - Role metadata
+
+galaxy_info:
+  role_name: execution_result_update_db
+  namespace: ansible_serverautomation
+  author: Ansible Server Automation Team
+  description: Ansible role to capture execution results from ansible-role-execution-result and store them in a database
+  company: Ansible Server Automation
+  
+  license: GPL-3.0-only
+  
+  min_ansible_version: "2.12"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Fedora
+      versions:
+        - 37
+        - 38
+    - name: Windows
+      versions:
+        - 2019
+        - 2022
+  
+  galaxy_tags:
+    - ansible
+    - automation
+    - database
+    - postgresql
+    - mysql
+    - sqlite
+    - mongodb
+    - awx
+    - tower
+    - execution
+    - results
+    - artifacts
+    - logging
+    - monitoring
+
+dependencies: []
+  # No dependencies - this role works standalone
+  # However, it expects execution_results fact to be set by ansible-role-execution-result
+  
+collections:
+  - community.postgresql
+  - community.mysql
+  - community.general
+  - community.mongodb

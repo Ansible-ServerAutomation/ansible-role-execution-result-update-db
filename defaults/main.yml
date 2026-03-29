@@ -1,0 +1,76 @@
+---
+# defaults/main.yml - Default variables for execution-result-update-db role
+
+# Database configuration
+execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
+execution_result_db_host: "localhost"
+execution_result_db_port: 5432
+execution_result_db_name: "ansible_execution_results"
+execution_result_db_user: "ansible"
+execution_result_db_password: ""
+execution_result_db_table_success: "success_jobs"
+execution_result_db_table_failed: "failed_jobs"
+
+# AWX/Tower Credential Integration
+# When running in AWX/Tower, database credentials can be injected via custom credentials
+# The injector configuration should map credential fields to these variables:
+#   execution_result_db_host: '{{ db_host }}'
+#   execution_result_db_port: '{{ db_port }}'
+#   execution_result_db_name: '{{ db_name }}'
+#   execution_result_db_user: '{{ db_username }}'
+#   execution_result_db_password: '{{ db_password }}'
+# These will override the default values above when provided by AWX/Tower credentials
+
+# SQLite specific
+execution_result_db_sqlite_path: "/var/lib/ansible/execution_results.db"
+
+# MongoDB specific
+execution_result_db_mongodb_collection_success: "success_jobs"
+execution_result_db_mongodb_collection_failed: "failed_jobs"
+execution_result_db_mongodb_auth_source: "admin"
+
+# SSL/TLS configuration
+execution_result_db_ssl_enabled: false
+execution_result_db_ssl_ca_cert: ""
+execution_result_db_ssl_client_cert: ""
+execution_result_db_ssl_client_key: ""
+
+# Connection settings
+execution_result_db_connection_timeout: 30
+execution_result_db_max_retries: 3
+execution_result_db_retry_delay: 5
+
+# Data source configuration
+execution_result_source_fact: "execution_results"  # Fact name from execution-result role
+execution_result_source_artifacts: true  # Try to read from AWX artifacts if available
+
+# Processing options
+execution_result_fail_on_db_error: false  # Whether to fail the play if database insert fails
+execution_result_validate_data: true  # Validate data before inserting
+execution_result_truncate_long_fields: true  # Truncate fields exceeding max length
+execution_result_max_field_length: 10000  # Maximum length for text fields
+
+# Batch processing
+execution_result_batch_insert: true  # Insert records in batches
+execution_result_batch_size: 100  # Number of records per batch
+
+# Filtering options
+execution_result_filter_duplicates: false  # Skip duplicate entries based on unique key
+execution_result_unique_fields:  # Fields that make a record unique (prevents exact duplicate inserts)
+  - timestamp
+  - scm_url
+  - scm_branch
+  - playbook
+  - inventory_hostname
+  # Note: This prevents the same job run from being inserted twice
+  # Each unique execution (timestamp + repo + branch + playbook + host) is tracked separately
+
+# Additional metadata to include
+execution_result_include_hostname: true
+execution_result_include_inventory_hostname: true
+execution_result_include_ansible_host: true
+execution_result_include_job_metadata: true
+
+# Debug and logging
+execution_result_debug_mode: false
+execution_result_log_queries: false

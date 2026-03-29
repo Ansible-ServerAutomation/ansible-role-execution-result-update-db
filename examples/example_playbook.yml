@@ -1,0 +1,165 @@
+---
+# Example playbook demonstrating usage of execution-result-update-db role
+# This playbook shows how to capture execution results and store them in a database
+
+# ==============================================================================
+# Example 1: Using AWX/Ansible Tower Credentials (Recommended for AWX/Tower)
+# ==============================================================================
+# When running in AWX/Tower, database credentials are automatically injected
+# via the custom credential type attached to the Job Template.
+# No need to specify credentials in the playbook - they come from AWX!
+- name: Example - Store Results with AWX Credentials
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Store execution results using AWX-injected credentials
+      ansible.builtin.include_role:
+        name: ansible-role-execution-result-update-db
+      vars:
+        # Only specify non-credential settings
+        # The following variables are automatically provided by AWX credentials:
+        #   execution_result_db_host        <- from db_host
+        #   execution_result_db_port        <- from db_port
+        #   execution_result_db_name        <- from db_name
+        #   execution_result_db_user        <- from db_username
+        #   execution_result_db_password    <- from db_password (encrypted)
+        
+        execution_result_db_type: "postgresql"
+        execution_result_debug_mode: true
+
+        # Optional: Override AWX-provided values if needed
+        # execution_result_db_table_success: "custom_success_table"
+        # execution_result_db_table_failed: "custom_failed_table"
+
+# ==============================================================================
+# Example 2: Standalone Ansible with Vault (For non-AWX environments)
+# ==============================================================================
+- name: Example - Capture and Store Execution Results
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    # First, run a task that generates execution results
+    - name: Perform a critical operation
+      block:
+        - name: Run a test command
+          ansible.builtin.command: /bin/echo "Test operation successful"
+          register: test_task_result
+          changed_when: false
+
+      rescue:
+        - name: Record execution failure
+          ansible.builtin.include_role:
+            name: ansible-role-execution-result
+          vars:
+            execution_result_registered_var: "{{ test_task_result }}"
+
+      always:
+        - name: Record execution success
+          ansible.builtin.include_role:
+            name: ansible-role-execution-result
+          vars:
+            execution_result_registered_var: "{{ test_task_result }}"
+
+    # Now capture and store the results in database
+    - name: Store execution results in database
+      ansible.builtin.include_role:
+        name: ansible-role-execution-result-update-db
+      vars:
+        # Database configuration
+        execution_result_db_type: "postgresql"  # or mysql, sqlite, mongodb
+        execution_result_db_host: "localhost"
+        execution_result_db_port: 5432
+        execution_result_db_name: "ansible_execution_results"
+        execution_result_db_user: "ansible_user"
+        execution_result_db_password: "{{ vault_db_password }}"  # Use Ansible Vault for passwords
+        
+        # Enable debug mode to see what's happening
+        execution_result_debug_mode: true
+
+---
+# Example with SQLite (simplest setup)
+- name: Example - Store Results in SQLite
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Store execution results in SQLite
+      ansible.builtin.include_role:
+        name: ansible-role-execution-result-update-db
+      vars:
+        execution_result_db_type: "sqlite"
+        execution_result_db_sqlite_path: "/tmp/ansible_results.db"
+        execution_result_debug_mode: true
+
+---
+# Example with MongoDB
+- name: Example - Store Results in MongoDB
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Store execution results in MongoDB
+      ansible.builtin.include_role:
+        name: ansible-role-execution-result-update-db
+      vars:
+        execution_result_db_type: "mongodb"
+        execution_result_db_host: "mongodb.example.com"
+        execution_result_db_port: 27017
+        execution_result_db_name: "ansible_automation"
+        execution_result_db_user: "ansible_writer"
+        execution_result_db_password: "{{ vault_mongodb_password }}"
+        execution_result_db_mongodb_collection_success: "success_jobs"
+        execution_result_db_mongodb_collection_failed: "failed_jobs"
+        execution_result_debug_mode: true
+
+---
+# Example complete workflow with block/rescue pattern
+- name: Complete Workflow Example
+  hosts: webservers
+  gather_facts: true
+  
+  tasks:
+    - name: Deploy application
+      block:
+        - name: Update application code
+          ansible.builtin.git:
+            repo: "https://github.com/example/app.git"
+            dest: /var/www/app
+            version: main
+          register: git_result
+
+        - name: Restart application service
+          ansible.builtin.systemd:
+            name: myapp
+            state: restarted
+          register: service_result
+
+        - name: Record successful deployment
+          ansible.builtin.include_role:
+            name: ansible-role-execution-result
+          vars:
+            execution_result_registered_var: "{{ service_result }}"
+
+      rescue:
+        - name: Record deployment failure
+          ansible.builtin.include_role:
+            name: ansible-role-execution-result
+          vars:
+            execution_result_registered_var: "{{ ansible_failed_result }}"
+
+      always:
+        # Store all execution results in database
+        - name: Persist execution results to database
+          ansible.builtin.include_role:
+            name: ansible-role-execution-result-update-db
+          vars:
+            execution_result_db_type: "postgresql"
+            execution_result_db_host: "{{ db_host }}"
+            execution_result_db_port: 5432
+            execution_result_db_name: "ansible_logs"
+            execution_result_db_user: "{{ db_user }}"
+            execution_result_db_password: "{{ db_password }}"
+          run_once: true
+          delegate_to: localhost

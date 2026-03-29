@@ -1,0 +1,6 @@
+---
+# handlers/main.yml - Handlers for execution-result-update-db role
+
+# Currently no handlers are needed for this role
+# Database operations are performed inline in tasks
+# Add handlers here if needed for future features

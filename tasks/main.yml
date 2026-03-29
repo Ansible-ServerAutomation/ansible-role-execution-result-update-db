@@ -1,0 +1,31 @@
+---
+# tasks/main.yml - Main tasks for execution-result-update-db role
+
+- name: Debug - Show role execution start
+  ansible.builtin.debug:
+    msg: "Starting execution-result-update-db role"
+  when: execution_result_debug_mode | bool
+
+- name: Validate database type
+  ansible.builtin.assert:
+    that:
+      - execution_result_db_type in ['postgresql', 'mysql', 'sqlite', 'mongodb']
+    fail_msg: "Invalid database type: {{ execution_result_db_type }}. Must be one of: postgresql, mysql, sqlite, mongodb"
+    success_msg: "Database type validated: {{ execution_result_db_type }}"
+
+- name: Include prerequisite tasks
+  ansible.builtin.include_tasks: prerequisites.yml
+
+- name: Include artifact capture tasks
+  ansible.builtin.include_tasks: capture_artifacts.yml
+
+- name: Include data preparation tasks
+  ansible.builtin.include_tasks: prepare_data.yml
+
+- name: Include database-specific tasks
+  ansible.builtin.include_tasks: "database_{{ execution_result_db_type }}.yml"
+
+- name: Debug - Show role execution complete
+  ansible.builtin.debug:
+    msg: "Completed execution-result-update-db role - {{ _execution_result_records_processed | default(0) }} records processed"
+  when: execution_result_debug_mode | bool

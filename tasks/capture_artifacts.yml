@@ -1,0 +1,67 @@
+---
+# tasks/capture_artifacts.yml - Capture execution results from facts or artifacts
+
+- name: Debug - Show available facts
+  ansible.builtin.debug:
+    msg: "Looking for execution results in fact: {{ execution_result_source_fact }}"
+  when: execution_result_debug_mode | bool
+
+- name: Check if execution_results fact exists
+  ansible.builtin.set_fact:
+    _execution_result_fact_exists: "{{ execution_result_source_fact in hostvars[inventory_hostname] }}"
+
+- name: Debug - Fact existence check
+  ansible.builtin.debug:
+    msg: "Execution results fact exists: {{ _execution_result_fact_exists }}"
+  when: execution_result_debug_mode | bool
+
+- name: Capture execution results from fact
+  ansible.builtin.set_fact:
+    _execution_results_raw: "{{ hostvars[inventory_hostname][execution_result_source_fact] | default([]) }}"
+  when: _execution_result_fact_exists | bool
+
+- name: Try to capture from AWX artifacts (if available)
+  block:
+    - name: Check for AWX artifacts environment variable
+      ansible.builtin.set_fact:
+        _execution_result_has_awx_artifacts: "{{ lookup('env', 'TOWER_JOB_ID') != '' or lookup('env', 'AWX_JOB_ID') != '' }}"
+    
+    - name: Capture from artifacts if running in AWX
+      ansible.builtin.set_fact:
+        _execution_results_raw: "{{ artifacts[execution_result_source_fact] | default([]) }}"
+      when:
+        - _execution_result_has_awx_artifacts | bool
+        - execution_result_source_artifacts | bool
+        - (_execution_results_raw is not defined or _execution_results_raw | length == 0)
+  when:
+    - execution_result_source_artifacts | bool
+    - not (_execution_result_fact_exists | bool)
+
+- name: Set default empty list if no results found
+  ansible.builtin.set_fact:
+    _execution_results_raw: []
+  when: _execution_results_raw is not defined
+
+- name: Debug - Show captured results count
+  ansible.builtin.debug:
+    msg: "Captured {{ _execution_results_raw | length }} execution result(s)"
+  when: execution_result_debug_mode | bool
+
+- name: Debug - Show first captured result (if any)
+  ansible.builtin.debug:
+    var: _execution_results_raw[0]
+  when:
+    - execution_result_debug_mode | bool
+    - _execution_results_raw | length > 0
+
+- name: Fail if no execution results found and strict mode
+  ansible.builtin.fail:
+    msg: "No execution results found in fact '{{ execution_result_source_fact }}' or AWX artifacts"
+  when:
+    - _execution_results_raw | length == 0
+    - execution_result_fail_on_db_error | bool
+
+- name: Warn if no execution results found
+  ansible.builtin.debug:
+    msg: "WARNING: No execution results found to process. Skipping database operations."
+  when: _execution_results_raw | length == 0
