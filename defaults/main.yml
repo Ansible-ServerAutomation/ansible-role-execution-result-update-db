@@ -15,6 +15,13 @@
 #   - AWX EE: "python3" (uses container Python)
 execution_result_python_interpreter: "python3"
 
+# Python package auto-installation
+# Attempt to install missing Python packages at runtime (psycopg2-binary, PyMySQL, pymongo)
+# Useful for AWX execution environments where packages may not be pre-installed
+# If installation fails (e.g., read-only containers), displays detailed EE build instructions
+execution_result_auto_install_packages: true
+execution_result_package_install_method: "user"  # Options: user (--user flag), system (requires sudo)
+
 # Database configuration
 execution_result_db_type: "postgresql"  # Options: postgresql, mysql, sqlite, mongodb
 execution_result_db_host: "10.0.0.14"

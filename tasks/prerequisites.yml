@@ -10,11 +10,34 @@
           register: _check_psycopg2
           changed_when: false
           failed_when: false
-          
+
         - name: Warn if psycopg2 is not available
           ansible.builtin.debug:
             msg: "WARNING: psycopg2-binary is required for PostgreSQL. Install with: pip install psycopg2-binary"
           when: _check_psycopg2.rc != 0
+
+        - name: Attempt to install psycopg2-binary if missing
+          ansible.builtin.include_tasks: install_packages.yml
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_psycopg2.rc != 0
+
+        - name: Re-check psycopg2 after installation attempt
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import psycopg2'"
+          register: _check_psycopg2_after_install
+          changed_when: false
+          failed_when: false
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_psycopg2.rc != 0
+
+        - name: Set PostgreSQL package readiness
+          ansible.builtin.set_fact:
+            _execution_result_python_package_ready: >-
+              {{
+                _check_psycopg2.rc == 0 or
+                (_check_psycopg2_after_install is defined and _check_psycopg2_after_install.rc == 0)
+              }}
       when: execution_result_db_type == 'postgresql'
 
     - name: Check if required Python packages are installed (MySQL)
@@ -24,11 +47,34 @@
           register: _check_pymysql
           changed_when: false
           failed_when: false
-          
+
         - name: Warn if PyMySQL is not available
           ansible.builtin.debug:
             msg: "WARNING: PyMySQL is required for MySQL. Install with: pip install PyMySQL"
           when: _check_pymysql.rc != 0
+
+        - name: Attempt to install PyMySQL if missing
+          ansible.builtin.include_tasks: install_packages.yml
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_pymysql.rc != 0
+
+        - name: Re-check PyMySQL after installation attempt
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import pymysql'"
+          register: _check_pymysql_after_install
+          changed_when: false
+          failed_when: false
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_pymysql.rc != 0
+
+        - name: Set MySQL package readiness
+          ansible.builtin.set_fact:
+            _execution_result_python_package_ready: >-
+              {{
+                _check_pymysql.rc == 0 or
+                (_check_pymysql_after_install is defined and _check_pymysql_after_install.rc == 0)
+              }}
       when: execution_result_db_type == 'mysql'
 
     - name: Check if required Python packages are installed (MongoDB)
@@ -38,12 +84,40 @@
           register: _check_pymongo
           changed_when: false
           failed_when: false
-          
+
         - name: Warn if pymongo is not available
           ansible.builtin.debug:
             msg: "WARNING: pymongo is required for MongoDB. Install with: pip install pymongo"
           when: _check_pymongo.rc != 0
+
+        - name: Attempt to install pymongo if missing
+          ansible.builtin.include_tasks: install_packages.yml
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_pymongo.rc != 0
+
+        - name: Re-check pymongo after installation attempt
+          ansible.builtin.command: "{{ execution_result_python_interpreter }} -c 'import pymongo'"
+          register: _check_pymongo_after_install
+          changed_when: false
+          failed_when: false
+          when:
+            - execution_result_auto_install_packages | bool
+            - _check_pymongo.rc != 0
+
+        - name: Set MongoDB package readiness
+          ansible.builtin.set_fact:
+            _execution_result_python_package_ready: >-
+              {{
+                _check_pymongo.rc == 0 or
+                (_check_pymongo_after_install is defined and _check_pymongo_after_install.rc == 0)
+              }}
       when: execution_result_db_type == 'mongodb'
+
+    - name: Set SQLite package readiness
+      ansible.builtin.set_fact:
+        _execution_result_python_package_ready: true
+      when: execution_result_db_type == 'sqlite'
 
     - name: Check database connectivity (PostgreSQL)
       block:
@@ -73,7 +147,7 @@
           when: _db_ping_result.rc != 0
       when:
         - execution_result_db_type == 'postgresql'
-        - _check_psycopg2.rc == 0
+        - _execution_result_python_package_ready | bool
 
     - name: Check database connectivity (MySQL)
       block:
@@ -103,5 +177,31 @@
           when: _db_ping_result.rc != 0
       when:
         - execution_result_db_type == 'mysql'
-        - _check_pymysql.rc == 0
+        - _execution_result_python_package_ready | bool
+
+    - name: Check database connectivity (MongoDB)
+      block:
+        - name: Test MongoDB connection using Python
+          ansible.builtin.command:
+            cmd: >
+              {{ execution_result_python_interpreter }} -c "from pymongo import MongoClient; client = MongoClient(
+              'mongodb://{{ execution_result_db_user }}:{{ execution_result_db_password }}@{{ execution_result_db_host }}:{{ execution_result_db_port }}/{{ execution_result_db_name }}?authSource={{ execution_result_db_mongodb_auth_source }}',
+              serverSelectionTimeoutMS=10000); client.admin.command('ping'); print('SUCCESS')"
+          register: _db_ping_result
+          changed_when: false
+          failed_when: false
+          no_log: true
+
+        - name: Debug - MongoDB connectivity result
+          ansible.builtin.debug:
+            msg: "MongoDB connection {{ 'successful' if _db_ping_result.rc == 0 else 'failed' }}"
+          when: execution_result_debug_mode | bool
+
+        - name: Warn if MongoDB connection failed
+          ansible.builtin.debug:
+            msg: "WARNING: MongoDB connectivity check failed. Please verify database credentials and connectivity."
+          when: _db_ping_result.rc != 0
+      when:
+        - execution_result_db_type == 'mongodb'
+        - _execution_result_python_package_ready | bool
   delegate_to: localhost

@@ -3,10 +3,17 @@
 
 # Required Ansible collections by database type
 _execution_result_collection_map:
-  postgresql: community.postgresql
   mysql: community.mysql
   mongodb: community.mongodb
   # sqlite doesn't require a collection
+
+# Python package pip names by database type
+# Used for auto-installation when packages are missing
+_execution_result_package_pip_map:
+  postgresql: "psycopg2-binary>=2.9.0"
+  mysql: "PyMySQL>=1.0.0"
+  mongodb: "pymongo>=4.0.0"
+  sqlite: ""  # SQLite doesn't require additional packages
 
 # Database port defaults by type
 _execution_result_db_ports:
