@@ -87,32 +87,29 @@ If `execution_result_auto_install_packages` is enabled, the role will attempt to
 
 ### Ansible Collections
 
-**IMPORTANT UPDATE**: As of the latest version, **PostgreSQL operations NO LONGER require** the `community.postgresql` Ansible collection. All PostgreSQL database operations use Python/psycopg2 directly.
-
-The following Ansible collections are required for **non-PostgreSQL** database types and will be **automatically installed on localhost** if not already present:
+The following Ansible collections are required based on your database type and will be **automatically installed on localhost** if not already present:
 
 | Database | Required Collection | Status |
 |----------|-------------------|---------|
-| PostgreSQL | ~~community.postgresql~~ | ✅ **NOT REQUIRED** - Uses Python directly |
-| MySQL | community.mysql | ❗ Required for MySQL operations |
-| MongoDB | community.mongodb | ❗ Required for MongoDB operations |
-| SQLite | community.general | Required (minimal usage) |
+| PostgreSQL | community.postgresql | ✅ Required for PostgreSQL operations |
+| MySQL | community.mysql | ✅ Required for MySQL operations |
+| MongoDB | community.mongodb | ✅ Required for MongoDB operations |
+| SQLite | community.general | ✅ Required for SQLite operations |
 
-**Installation (for MySQL/MongoDB only)**:
+**Installation**:
 ```bash
+ansible-galaxy collection install community.postgresql
 ansible-galaxy collection install community.mysql
 ansible-galaxy collection install community.general
 ansible-galaxy collection install community.mongodb
 ```
 
-**For PostgreSQL users**: No Ansible collection installation needed! The role uses Python/psycopg2 directly for all database operations (connectivity checks, table verification, and INSERT operations).
-
 **For AWX/Tower Users**: 
-- **PostgreSQL**: Only install `psycopg2-binary` in your execution environment. No collection needed.
-- **MySQL/MongoDB**: Pre-install collections in your execution environment for better performance. See [AWX Execution Environment Setup](#awx-execution-environment-setup) below.
-- **Runtime fallback**: The role can attempt `pip install --user` for missing Python drivers when `execution_result_auto_install_packages: true`, but read-only containers still require a pre-built execution environment.
+- Pre-install collections in your execution environment for better performance. See [AWX Execution Environment Setup](#awx-execution-environment-setup) below.
+- The role will attempt to install collections at runtime if missing, but pre-installation is recommended.
+- Python database drivers (psycopg2, PyMySQL, pymongo) must also be installed in the execution environment.
 
-**For standalone Ansible**: The role will automatically check and install the required collection based on your database type (except PostgreSQL which needs no collection).
+**For standalone Ansible**: The role will automatically check and install the required collection based on your database type.
 
 ## Database Setup
 
@@ -301,12 +298,13 @@ additional_build_steps:
     - RUN ansible-galaxy collection install -r requirements.yml
 ```
 
-Create `requirements.yml` (for MySQL/MongoDB only):
+Create `requirements.yml`:
 
 ```yaml
 ---
 collections:
-  # community.postgresql NOT NEEDED - role uses Python directly
+  - name: community.postgresql
+    version: ">=3.0.0"
   - name: community.mysql
     version: ">=3.0.0"
   - name: community.general
@@ -318,7 +316,7 @@ collections:
 Create `requirements.txt`:
 
 ```
-psycopg2-binary>=2.9.0  # For PostgreSQL (no collection needed!)
+psycopg2-binary>=2.9.0  # For PostgreSQL
 PyMySQL>=1.0.0          # For MySQL
 pymongo>=4.0.0          # For MongoDB
 ```
@@ -340,16 +338,15 @@ RUN pip3 install --no-cache-dir \
     PyMySQL>=1.0.0 \
     pymongo>=4.0.0
 
-# Install Ansible collections (community.postgresql NOT needed!)
+# Install Ansible collections
 RUN ansible-galaxy collection install \
+    community.postgresql \
     community.mysql \
     community.general \
     community.mongodb
 
 USER 1000
 ```
-
-**Note**: For PostgreSQL-only deployments, you can skip the `ansible-galaxy collection install` step entirely.
 
 Build and push:
 
@@ -365,13 +362,13 @@ Create `collections/requirements.yml` in your Ansible project:
 ```yaml
 ---
 collections:
-  # community.postgresql NOT NEEDED - role uses Python directly
+  - community.postgresql
   - community.mysql
   - community.general
   - community.mongodb
 ```
 
-**Note**: This approach downloads collections at job runtime, increasing execution time and potential for failures. Not needed at all for PostgreSQL-only deployments.
+**Note**: This approach downloads collections at job runtime, increasing execution time and potential for failures.
 
 ### Verifying Collection Installation
 
@@ -1067,13 +1064,11 @@ pip install pymongo
 
 ### Missing Ansible Collections Error
 
-**Error**: `couldn't resolve module/action 'community.mysql.mysql_query'` or similar collection module errors
-
-**Important Update**: As of the latest version, database connectivity checks use Python directly and **do not require** Ansible collections to be pre-installed. However, the actual database operations (insert, query) still require the appropriate Ansible collections.
+**Error**: `couldn't resolve module/action 'community.postgresql.postgresql_query'` or similar collection module errors
 
 **When This Occurs**:
-- Collections are installed during playbook execution but not available in the current Ansible execution context
 - Collections are not pre-installed in AWX/Tower execution environments
+- Collections are installed during playbook execution but not available in the current Ansible execution context
 - Collection paths are not properly configured
 
 **Solutions**:
@@ -1084,7 +1079,7 @@ pip install pymongo
 
 2. **For standalone Ansible**: Install collections before running the playbook:
    ```bash
-  ansible-galaxy collection install community.mysql community.general community.mongodb
+  ansible-galaxy collection install community.postgresql community.mysql community.general community.mongodb
    ```
 
 3. **If error persists after installation**: The collection may not be loaded in the current execution context. Try:

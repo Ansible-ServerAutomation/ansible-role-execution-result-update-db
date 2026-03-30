@@ -23,10 +23,9 @@ python scripts/test_postgresql_connectivity.py --host 10.0.0.14 --user postgres 
 ansible-playbook examples/example_playbook.yml --ask-vault-pass
 ```
 
-**Install required Ansible collections (MySQL/MongoDB only):**
+**Install required Ansible collections:**
 ```bash
-ansible-galaxy collection install community.mysql community.mongodb community.general
-# Note: PostgreSQL operations don't require community.postgresql - they use Python directly
+ansible-galaxy collection install community.postgresql community.mysql community.mongodb community.general
 ```
 
 ## Project Architecture
@@ -37,9 +36,11 @@ ansible-galaxy collection install community.mysql community.mongodb community.ge
    - Database connections happen from control node, not managed hosts
    - Ensures consistent database access regardless of inventory targets
 
-2. **Python-Direct Database Access**: PostgreSQL uses Python/psycopg2 directly instead of Ansible collection modules
-   - Avoids "couldn't resolve module" errors in AWX/Tower when collections aren't pre-installed
-   - Exit code convention: `0` = success, `1` = not found, `2` = fatal error (import/connection failure)
+2. **Ansible Collection Modules**: All database types (PostgreSQL, MySQL, MongoDB) use their respective Ansible collection modules
+   - PostgreSQL: Uses `community.postgresql` collection modules (`postgresql_query`)
+   - MySQL: Uses `community.mysql` collection modules
+   - MongoDB: Uses `community.mongodb` collection modules
+   - Requires pre-installation of collections in AWX/Tower execution environments
 
 3. **No Schema Management**: This role does NOT create databases or tables
    - Verifies existence and fails fast if infrastructure isn't ready
@@ -58,7 +59,7 @@ tasks/
 ├── prerequisites.yml           # Python package checks, connectivity tests
 ├── capture_artifacts.yml       # Read execution_results fact from ansible-role-execution-result
 ├── prepare_data.yml            # Validate, truncate fields, split success/failed records
-├── database_postgresql.yml     # PostgreSQL operations (Python/psycopg2 direct)
+├── database_postgresql.yml     # PostgreSQL operations (uses community.postgresql)
 ├── database_mysql.yml          # MySQL operations (uses community.mysql collection)
 ├── database_sqlite.yml         # SQLite operations (uses community.general collection)
 └── database_mongodb.yml        # MongoDB operations (uses community.mongodb collection)
@@ -87,12 +88,12 @@ docs/
 ### Making Changes to Database Logic
 
 1. **PostgreSQL changes** → Edit [tasks/database_postgresql.yml](../tasks/database_postgresql.yml)
-   - Uses Python heredoc style: `{{ execution_result_python_interpreter }} << 'EOF'`
-   - Always separate `ImportError` from connection errors (different exit codes)
-   - Add `failed_when: false` + conditional fail tasks for precise error messages
+   - Uses `community.postgresql.postgresql_query` module for all database operations
+   - Requires `community.postgresql` collection to be installed
+   - Simpler and more maintainable than direct Python approach
 
 2. **MySQL/MongoDB changes** → Edit respective task files
-   - These use Ansible collection modules (not Python direct)
+   - These use Ansible collection modules (community.mysql, community.mongodb)
    - Collection modules require pre-installation in execution environments
 
 3. **Data preparation/validation** → Edit [tasks/prepare_data.yml](../tasks/prepare_data.yml)
@@ -122,17 +123,19 @@ docs/
 
 - **Use `delegate_to: localhost`** at block level for all database operations
 - **Use `run_once: true`** for database verification tasks (avoid redundant checks)
-- **Separate import errors from connection errors** with distinct exit codes
+- **Use Ansible collection modules** for all database operations (PostgreSQL, MySQL, MongoDB)
 - **Use `no_log: false` on diagnostic tasks** for visibility during troubleshooting
 - **Truncate long fields** using slice notation: `[:max_length]`
 - **Test with AWX/Tower** to catch execution environment issues early
+- **Pre-install collections** in execution environments for AWX/Tower deployments
 
 ### ❌ DON'T
 
-- **Never use collection modules at task level then install collection at runtime**
+- **Never use collection modules without pre-installing collections**
+  - Collections must be pre-installed in AWX/Tower execution environments
   - Collections installed during playbook execution aren't available for module resolution
   - Parse-time errors can't be caught by rescue blocks
-  - Solution: Use Python directly (PostgreSQL pattern) or pre-install collections
+  - Solution: Pre-install collections in execution environment definition
 
 - **Never place module names as block-level attributes**
   ```yaml
@@ -162,10 +165,9 @@ docs/
 
 ## Known Issues & Solutions
 
-See [BUGFIX_SUMMARY.md](../BUGFIX_SUMMARY.md) for detailed history. Key lessons:
-
-1. **Collection parse-time errors**: Collections installed at runtime aren't available → Use Python directly
+See [BUGFIX_SUMMrequirements**: All database types now use Ansible collection modules → Pre-install in execution environments
 2. **Invalid Python interpreter path (exit code 127)**: Path doesn't exist → Validate and provide helpful error
+3. **Invalid Python interpreter path (exit code 127)**: Path doesn't exist → Validate and provide helpful error
 3. **Masked import errors**: ImportError vs ConnectionError indistinguishable → Separate error handling with distinct exit codes
 4. **YAML block attribute errors**: Module names at block level → Only use valid block directives (delegate_to, when, rescue, etc.)
 
@@ -179,14 +181,13 @@ See [BUGFIX_SUMMARY.md](../BUGFIX_SUMMARY.md) for detailed history. Key lessons:
 ## AWX/Tower-Specific Guidance
 
 ### Execution Environment Setup
+All database types require pre-installed collections in execution environments:**
 
-**PostgreSQL**: No collection needed, just ensure Python package is installed
 ```dockerfile
 # In your EE definition
-RUN pip3 install --no-cache-dir psycopg2-binary>=2.9.0
+RUN pip3 install --no-cache-dir psycopg2-binary>=2.9.0 PyMySQL>=1.0.0 pymongo>=4.0.0
 ```
 
-**MySQL/MongoDB**: Pre-install collections in execution environment
 ```yaml
 # execution-environment.yml
 dependencies:
@@ -194,6 +195,9 @@ dependencies:
   python: requirements.txt
 
 # requirements.yml
+collections:
+  - name: community.postgresql
+    version: ">=3.0.0"ts.yml
 collections:
   - name: community.mysql
     version: ">=3.0.0"
@@ -214,7 +218,7 @@ collections:
 - Virtual environments on Tower host aren't accessible in container
 - Solution: Use container Python or create proper inventory delegation
 
-**"Collection not found" errors**:
+**All database types require collections pre-installed (community.postgresql, community.mysql, community.mongodb)
 - MySQL/MongoDB still require collections pre-installed
 - Can't install collections at runtime in AWX
 - Solution: Build custom EE with collections included

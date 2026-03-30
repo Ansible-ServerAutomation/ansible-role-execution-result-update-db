@@ -54,6 +54,45 @@
     - name: Include prerequisite tasks
       ansible.builtin.include_tasks: prerequisites.yml
 
+    - name: Fail if required Python database package is still unavailable
+      ansible.builtin.fail:
+        msg:
+          - "Required Python package for {{ execution_result_db_type }} is still unavailable after prerequisite checks."
+          - "Interpreter: {{ execution_result_python_interpreter }}"
+          - "Auto-install enabled: {{ execution_result_auto_install_packages | bool }}"
+          - "Install method: {{ execution_result_package_install_method }}"
+          - "Attempted package: {{ _execution_result_pip_package | default('not determined') }}"
+          - "Install stderr: {{ _execution_result_package_install_error | default('none') }}"
+          - "Install stdout: {{ _execution_result_package_install_output | default('none') }}"
+          - "Install the package in the execution environment or disable this role for hosts without database access."
+          - "See docs/EXECUTION_ENVIRONMENT.md for supported installation approaches."
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - execution_result_fail_on_db_error | bool
+
+    - name: Warn if required Python database package is still unavailable
+      ansible.builtin.debug:
+        msg:
+          - "WARNING: Required Python package for {{ execution_result_db_type }} is still unavailable after prerequisite checks."
+          - "Skipping database operations because execution_result_fail_on_db_error is false."
+          - "Interpreter: {{ execution_result_python_interpreter }}"
+          - "Attempted package: {{ _execution_result_pip_package | default('not determined') }}"
+          - "Install stderr: {{ _execution_result_package_install_error | default('none') }}"
+          - "Install stdout: {{ _execution_result_package_install_output | default('none') }}"
+          - "See docs/EXECUTION_ENVIRONMENT.md for supported installation approaches."
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - not (execution_result_fail_on_db_error | bool)
+
+    - name: Stop role when Python database package is unavailable
+      ansible.builtin.meta: end_host
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - not (execution_result_fail_on_db_error | bool)
+
     - name: Include artifact capture tasks
       ansible.builtin.include_tasks: capture_artifacts.yml
 
