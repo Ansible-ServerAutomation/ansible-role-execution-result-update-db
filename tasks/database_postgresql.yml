@@ -29,7 +29,6 @@
         query: "SELECT 1 FROM pg_database WHERE datname = %s"
         positional_args:
           - "{{ execution_result_db_name }}"
-        connect_timeout: 10
       register: _db_exists_check
       changed_when: false
       failed_when: false
@@ -38,11 +37,11 @@
     - name: Debug - Show database check result
       ansible.builtin.debug:
         msg:
-          - "Database exists: {{ _db_exists_check.query_result | default([]) | length > 0 }}"
-          - "Query result: {{ _db_exists_check }}"
-      when: 
-        - execution_result_debug_mode | bool
-        - _db_exists_check.failed is defined and _db_exists_check.failed
+          - "Database check failed: {{ _db_exists_check.failed | default(false) }}"
+          - "Query result: {{ _db_exists_check.query_result | default([]) }}"
+          - "Row count: {{ _db_exists_check.rowcount | default(0) }}"
+          - "Full result: {{ _db_exists_check }}"
+      when: execution_result_debug_mode | bool
 
     - name: Fail if database connection failed
       ansible.builtin.fail:
@@ -65,7 +64,7 @@
         msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
       when: 
         - not (_db_exists_check.failed | default(false))
-        - _db_exists_check.query_result | default([]) | length == 0
+        - (_db_exists_check.query_result | default([]) | length == 0) and (_db_exists_check.rowcount | default(0) == 0)
       run_once: true
 
     - name: Verify success_jobs table exists
@@ -78,7 +77,6 @@
         query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
         positional_args:
           - "{{ execution_result_db_table_success }}"
-        connect_timeout: 10
       register: _success_table_exists
       changed_when: false
       failed_when: false
@@ -102,7 +100,6 @@
         query: "SELECT 1 FROM information_schema.tables WHERE table_name = %s"
         positional_args:
           - "{{ execution_result_db_table_failed }}"
-        connect_timeout: 10
       register: _failed_table_exists
       changed_when: false
       failed_when: false
@@ -164,7 +161,6 @@
               - "{{ item.os_family | default('') }}"
               - "{{ item.os_system | default('') }}"
               - "{{ item.os_architecture | default('') }}"
-            connect_timeout: 10
           loop: "{{ _execution_results_success }}"
           loop_control:
             label: "{{ item.timestamp }} - {{ item.status }}"
@@ -223,7 +219,6 @@
               - "{{ item.os_family | default('') }}"
               - "{{ item.os_system | default('') }}"
               - "{{ item.os_architecture | default('') }}"
-            connect_timeout: 10
           loop: "{{ _execution_results_failed }}"
           loop_control:
             label: "{{ item.timestamp }} - {{ item.status }}"
