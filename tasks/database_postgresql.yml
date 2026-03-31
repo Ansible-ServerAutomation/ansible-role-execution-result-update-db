@@ -38,7 +38,7 @@
     - name: Debug - Show database check result
       ansible.builtin.debug:
         msg:
-          - "Database exists: {{ _db_exists_check.query_result | length > 0 }}"
+          - "Database exists: {{ _db_exists_check.query_result | default([]) | length > 0 }}"
           - "Query result: {{ _db_exists_check }}"
       when: 
         - execution_result_debug_mode | bool
@@ -65,7 +65,7 @@
         msg: "Database '{{ execution_result_db_name }}' does not exist on {{ execution_result_db_host }}. Please create it before using this role."
       when: 
         - not (_db_exists_check.failed | default(false))
-        - _db_exists_check.query_result | length == 0
+        - _db_exists_check.query_result | default([]) | length == 0
       run_once: true
 
     - name: Verify success_jobs table exists
@@ -89,7 +89,7 @@
         msg: "Table '{{ execution_result_db_table_success }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
       when: 
         - not (_success_table_exists.failed | default(false))
-        - _success_table_exists.query_result | length == 0
+        - _success_table_exists.query_result | default([]) | length == 0
       run_once: true
 
     - name: Verify failed_jobs table exists
@@ -113,7 +113,7 @@
         msg: "Table '{{ execution_result_db_table_failed }}' does not exist in database '{{ execution_result_db_name }}'. Please create it before using this role."
       when: 
         - not (_failed_table_exists.failed | default(false))
-        - _failed_table_exists.query_result | length == 0
+        - _failed_table_exists.query_result | default([]) | length == 0
       run_once: true
 
     - name: Insert successful execution results into PostgreSQL
