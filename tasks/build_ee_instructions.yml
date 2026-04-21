@@ -1,0 +1,85 @@
+---
+# tasks/build_ee_instructions.yml - Display execution environment build instructions
+
+- name: Display execution environment build instructions
+  block:
+    - name: Set package-specific instructions
+      ansible.builtin.set_fact:
+        _execution_result_ee_package: "{{ _execution_result_pip_package }}"
+        _execution_result_ee_context: "{{ 'AWX/Tower' if _execution_result_is_awx | default(false) else 'Standalone' }}"
+
+    - name: Display execution environment build guide
+      ansible.builtin.debug:
+        msg:
+          - "================================================================================"
+          - "EXECUTION ENVIRONMENT BUILD INSTRUCTIONS"
+          - "================================================================================"
+          - ""
+          - "To resolve this issue, pre-install {{ _execution_result_ee_package }} in your execution environment."
+          - ""
+          - "--- OPTION 1: Using ansible-builder (Recommended for AWX) ---"
+          - ""
+          - "Create execution-environment.yml:"
+          - "  ---"
+          - "  version: 3"
+          - "  dependencies:"
+          - "    python:"
+          - "      - {{ _execution_result_ee_package }}"
+          - "    galaxy: requirements.yml"
+          - ""
+          - "Build the execution environment:"
+          - "  ansible-builder build -t my-custom-ee:latest -v 3"
+          - ""
+          - "--- OPTION 2: Using Dockerfile (For custom EE images) ---"
+          - ""
+          - "Add to your Dockerfile:"
+          - "  FROM quay.io/ansible/awx-ee:latest"
+          - "  RUN pip3 install --no-cache-dir {{ _execution_result_ee_package }}"
+          - ""
+          - "Build the image:"
+          - "  docker build -t my-custom-ee:latest ."
+          - ""
+          - "--- OPTION 3: Update existing EE with podman ---"
+          - ""
+          - "Create Containerfile:"
+          - "  FROM <your-current-ee-image>"
+          - "  RUN pip3 install --no-cache-dir {{ _execution_result_ee_package }}"
+          - ""
+          - "Build with podman:"
+          - "  podman build -t my-ee-with-{{ execution_result_db_type }}:latest ."
+          - ""
+          - "--- STANDALONE ANSIBLE (Non-AWX environments) ---"
+          - ""
+          - "Install directly in your Python environment:"
+          - "  {{ execution_result_python_interpreter }} -m pip install {{ _execution_result_ee_package }}"
+          - ""
+          - "Or create a virtual environment:"
+          - "  python3 -m venv /path/to/venv"
+          - "  source /path/to/venv/bin/activate"
+          - "  pip install {{ _execution_result_ee_package }}"
+          - ""
+          - "Then configure the role to use that venv:"
+          - "  execution_result_python_interpreter: \"/path/to/venv/bin/python\""
+          - ""
+          - "For detailed instructions, see: docs/EXECUTION_ENVIRONMENT.md"
+          - "================================================================================"
+
+    - name: Display quick troubleshooting tips
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "Quick Troubleshooting:"
+          - "  - Check if Python path is correct: {{ execution_result_python_interpreter }}"
+          - "  - Verify pip is available: {{ execution_result_python_interpreter }} -m pip --version"
+          - "  - Check permissions: Container may be read-only (common in AWX)"
+          - "  - Disable auto-install: Set execution_result_auto_install_packages: false"
+          - ""
+          - "Database-specific package information:"
+          - "  PostgreSQL: {{ _execution_result_package_pip_map.postgresql }}"
+          - "  MySQL:      {{ _execution_result_package_pip_map.mysql }}"
+          - "  MongoDB:    {{ _execution_result_package_pip_map.mongodb }}"
+          - "  SQLite:     No additional packages required"
+          - ""
+
+  delegate_to: localhost
+  run_once: true

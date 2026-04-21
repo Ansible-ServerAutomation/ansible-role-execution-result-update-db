@@ -1,0 +1,130 @@
+---
+# tasks/main.yml - Main tasks for execution-result-update-db role
+
+- name: Execute database update operations on localhost
+  block:
+    - name: Debug - Show role execution start
+      ansible.builtin.debug:
+        msg: "Starting execution-result-update-db role"
+      when: execution_result_debug_mode | bool
+
+    - name: Validate database type
+      ansible.builtin.assert:
+        that:
+          - execution_result_db_type in ['postgresql', 'mysql', 'sqlite', 'mongodb']
+        fail_msg: "Invalid database type: {{ execution_result_db_type }}. Must be one of: postgresql, mysql, sqlite, mongodb"
+        success_msg: "Database type validated: {{ execution_result_db_type }}"
+
+    - name: Check if required Ansible collection is installed
+      ansible.builtin.command: ansible-galaxy collection list {{ _required_collection }}
+      register: _collection_check
+      changed_when: false
+      failed_when: false
+      vars:
+        _required_collection: "{{ _execution_result_collection_map[execution_result_db_type] }}"
+      when: execution_result_db_type in _execution_result_collection_map
+
+    - name: Install required Ansible collection if missing
+      ansible.builtin.command: ansible-galaxy collection install {{ _required_collection }} --force
+      vars:
+        _required_collection: "{{ _execution_result_collection_map[execution_result_db_type] }}"
+      when:
+        - execution_result_db_type in _execution_result_collection_map
+        - _collection_check.rc != 0 or _required_collection not in _collection_check.stdout
+      register: _collection_install
+      changed_when: "'installed' in _collection_install.stdout or 'downloaded' in _collection_install.stdout"
+
+    - name: Debug - Show collection installation result
+      ansible.builtin.debug:
+        msg: "Collection {{ _execution_result_collection_map[execution_result_db_type] }} {{ 'installed successfully' if _collection_install is changed else 'already installed' }}"
+      when:
+        - execution_result_debug_mode | bool
+        - execution_result_db_type in _execution_result_collection_map
+
+    - name: Display collection installation notice
+      ansible.builtin.debug:
+        msg:
+          - "NOTICE: Collection {{ _execution_result_collection_map[execution_result_db_type] }} was just installed."
+          - "If you encounter module resolution errors, the collection may not be available in the current execution context."
+          - "For best results, pre-install collections in your execution environment."
+      when:
+        - _collection_install is changed
+        - execution_result_db_type in _execution_result_collection_map
+
+    - name: Include prerequisite tasks
+      ansible.builtin.include_tasks: prerequisites.yml
+
+    - name: Fail if required Python database package is still unavailable
+      ansible.builtin.fail:
+        msg:
+          - "Required Python package for {{ execution_result_db_type }} is still unavailable after prerequisite checks."
+          - "Interpreter: {{ execution_result_python_interpreter }}"
+          - "Auto-install enabled: {{ execution_result_auto_install_packages | bool }}"
+          - "Install method: {{ execution_result_package_install_method }}"
+          - "Attempted package: {{ _execution_result_pip_package | default('not determined') }}"
+          - "Install stderr: {{ _execution_result_package_install_error | default('none') }}"
+          - "Install stdout: {{ _execution_result_package_install_output | default('none') }}"
+          - "Install the package in the execution environment or disable this role for hosts without database access."
+          - "See docs/EXECUTION_ENVIRONMENT.md for supported installation approaches."
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - execution_result_fail_on_db_error | bool
+
+    - name: Warn if required Python database package is still unavailable
+      ansible.builtin.debug:
+        msg:
+          - "WARNING: Required Python package for {{ execution_result_db_type }} is still unavailable after prerequisite checks."
+          - "Skipping database operations because execution_result_fail_on_db_error is false."
+          - "Interpreter: {{ execution_result_python_interpreter }}"
+          - "Attempted package: {{ _execution_result_pip_package | default('not determined') }}"
+          - "Install stderr: {{ _execution_result_package_install_error | default('none') }}"
+          - "Install stdout: {{ _execution_result_package_install_output | default('none') }}"
+          - "See docs/EXECUTION_ENVIRONMENT.md for supported installation approaches."
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - not (execution_result_fail_on_db_error | bool)
+
+    - name: Stop role when Python database package is unavailable
+      ansible.builtin.meta: end_host
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_python_package_ready | default(false) | bool)
+        - not (execution_result_fail_on_db_error | bool)
+
+    - name: Include artifact capture tasks
+      ansible.builtin.include_tasks: capture_artifacts.yml
+
+    - name: Include data preparation tasks
+      ansible.builtin.include_tasks: prepare_data.yml
+
+    - name: Include database-specific tasks
+      block:
+        - name: Execute database operations
+          ansible.builtin.include_tasks: "database_{{ execution_result_db_type }}.yml"
+      rescue:
+        - name: Handle database operation failure
+          ansible.builtin.fail:
+            msg:
+              - "Failed to execute database operations for {{ execution_result_db_type }}."
+              - "If the error mentions 'couldn't resolve module/action', the required collection may not be available."
+              - "Required collection: {{ _execution_result_collection_map[execution_result_db_type] | default('none') }}"
+              - "Solution: Pre-install the collection in your execution environment or run the playbook again."
+              - "For AWX/Tower: Add the collection to your execution environment image."
+              - "Original error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          when: execution_result_fail_on_db_error | bool
+
+        - name: Warn about database operation failure
+          ansible.builtin.debug:
+            msg:
+              - "WARNING: Database operation failed for {{ execution_result_db_type }}."
+              - "Continuing because execution_result_fail_on_db_error is false."
+              - "Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          when: not (execution_result_fail_on_db_error | bool)
+
+    - name: Debug - Show role execution complete
+      ansible.builtin.debug:
+        msg: "Completed execution-result-update-db role - {{ _execution_result_records_processed | default(0) }} records processed"
+      when: execution_result_debug_mode | bool
+  delegate_to: localhost

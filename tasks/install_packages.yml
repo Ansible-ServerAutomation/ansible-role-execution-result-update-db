@@ -1,0 +1,105 @@
+---
+# tasks/install_packages.yml - Attempt to install missing Python database packages
+
+- name: Attempt Python package installation on localhost
+  block:
+    - name: Detect execution environment context
+      ansible.builtin.set_fact:
+        _execution_result_is_awx: >-
+          {{
+            (execution_result_python_interpreter.startswith('/runner/')) or
+            (lookup('env', 'TOWER_JOB_ID') != '') or
+            (lookup('env', 'AWX_JOB_ID') != '')
+          }}
+
+    - name: Debug - Show execution context
+      ansible.builtin.debug:
+        msg: "Detected {{ 'AWX/Tower' if _execution_result_is_awx else 'Standalone Ansible' }} execution environment"
+      when: execution_result_debug_mode | bool
+
+    - name: Get pip package name for current database type
+      ansible.builtin.set_fact:
+        _execution_result_pip_package: "{{ _execution_result_package_pip_map[execution_result_db_type] }}"
+      when: execution_result_db_type != 'sqlite'
+
+    - name: Skip installation for SQLite
+      ansible.builtin.debug:
+        msg: "SQLite does not require additional Python packages"
+      when: execution_result_db_type == 'sqlite'
+
+    - name: Attempt to install missing Python package
+      block:
+        - name: Build pip install command
+          ansible.builtin.set_fact:
+            _execution_result_pip_cmd: >-
+              {{ execution_result_python_interpreter }} -m pip install
+              {% if execution_result_package_install_method == 'user' %}--user{% endif %}
+              {{ _execution_result_pip_package }}
+
+        - name: Debug - Show pip command
+          ansible.builtin.debug:
+            msg: "Will execute: {{ _execution_result_pip_cmd }}"
+          when: execution_result_debug_mode | bool
+
+        - name: Execute pip install
+          ansible.builtin.command: "{{ _execution_result_pip_cmd }}"
+          register: _execution_result_pip_install
+          changed_when: "'Successfully installed' in _execution_result_pip_install.stdout"
+          failed_when: false
+          environment:
+            PYTHONUSERBASE: "{{ lookup('env', 'HOME') }}/.local"
+
+        - name: Set installation status
+          ansible.builtin.set_fact:
+            _execution_result_package_installed: "{{ _execution_result_pip_install.rc == 0 }}"
+            _execution_result_package_install_output: "{{ _execution_result_pip_install.stdout | default('') }}"
+            _execution_result_package_install_error: "{{ _execution_result_pip_install.stderr | default('') }}"
+
+        - name: Debug - Show installation result
+          ansible.builtin.debug:
+            msg:
+              - "Package installation {{ 'succeeded' if _execution_result_package_installed else 'failed' }}"
+              - "Exit code: {{ _execution_result_pip_install.rc }}"
+              - "Output: {{ _execution_result_package_install_output }}"
+          when: execution_result_debug_mode | bool
+
+        - name: Display installation success message
+          ansible.builtin.debug:
+            msg: "Successfully installed {{ _execution_result_pip_package }} for {{ execution_result_db_type }}"
+          when:
+            - _execution_result_package_installed | bool
+            - "'Successfully installed' in _execution_result_package_install_output"
+
+        - name: Display installation already-satisfied message
+          ansible.builtin.debug:
+            msg: "Package {{ _execution_result_pip_package }} is already installed"
+          when:
+            - _execution_result_package_installed | bool
+            - "'Requirement already satisfied' in _execution_result_package_install_output"
+
+      when:
+        - execution_result_db_type != 'sqlite'
+        - _execution_result_pip_package is defined
+        - _execution_result_pip_package != ''
+
+    - name: Handle installation failure
+      block:
+        - name: Display installation failure warning
+          ansible.builtin.debug:
+            msg:
+              - "WARNING: Failed to install {{ _execution_result_pip_package }}"
+              - "Error: {{ _execution_result_package_install_error }}"
+              - "The role will attempt to proceed, but database operations will likely fail."
+              - "For best results, pre-install packages in your execution environment."
+
+        - name: Include EE build instructions
+          ansible.builtin.include_tasks: build_ee_instructions.yml
+
+      when:
+        - execution_result_db_type != 'sqlite'
+        - not (_execution_result_package_installed | default(false))
+        - _execution_result_package_install_error is defined
+        - _execution_result_package_install_error != ''
+
+  delegate_to: localhost
+  run_once: true
